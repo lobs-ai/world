@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Show every available script with a one-line description.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+cat <<EOF
+$(color_blue "world — scripts")
+
+  $(color_green "./scripts/run")                do everything: setup, seed, tick loop, web ↑
+  $(color_green "./scripts/setup")              install deps, build app, prep .env (one-time)
+  $(color_green "./scripts/genesis") "<premise>"  seed a new world from a one-line premise
+  $(color_green "./scripts/tick") [worldId]     run one tick (--n 5 to run several)
+  $(color_green "./scripts/loop") [worldId]     run forever, every 15 min (Ctrl-C to stop)
+  $(color_green "./scripts/web")                 open the chronicle on http://localhost:3000
+  $(color_green "./scripts/dump") [worldId]     list worlds, or dump a chronicle as markdown
+  $(color_green "./scripts/reset")              wipe the local database (asks first)
+  $(color_green "./scripts/help")               this list
+
+$(color_dim "first run (zero-knowledge):")
+  ./scripts/run
+
+$(color_dim "first run (manual):")
+  ./scripts/setup
+  ./scripts/genesis "A kingdom where the king has been dying for forty years."
+  ./scripts/tick
+  ./scripts/web
+
+EOF

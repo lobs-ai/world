@@ -2,7 +2,7 @@
 
 A persistent, agent-driven medieval fantasy world that reads like an unfolding story.
 
-You give it a premise. It builds a world — geography, characters, factions, plots — then runs forever. A director agent decides what happens next. Character agents act in scenes, each one seeing only what they know. A scribe renders the result as parchment-chronicle prose. The site is the chronicle: readers visit and watch the story continue.
+You give it a premise. It builds a world — geography, characters, factions, plots — then runs. A director agent decides what happens next. Character agents act in scenes, each one seeing only what they know. A scribe renders the result as parchment-chronicle prose. The site is the chronicle: readers visit and watch the story continue.
 
 ## The shape of it
 
@@ -18,17 +18,52 @@ Every tick produces one chronicle entry. The chronicle is the product.
 
 ## Stack
 
-- Python 3.11+, FastAPI, SQLAlchemy 2.0 + Alembic, Pydantic v2
-- Postgres in production, SQLite for local dev
-- Anthropic SDK — Sonnet for character + scribe, Opus for director and weekly chapter
-- Next.js (App Router) + Tailwind for the frontend
-- APScheduler for the tick loop
+- Node 20+ / TypeScript, npm workspaces (`app/` engine, `web/` frontend)
+- `@agentic/llm` (Minimax provider) for all LLM calls
+- Zod for schema-validated LLM I/O
+- `better-sqlite3` for storage (single-file SQLite at `data/world.db`)
+- Next.js (App Router) for the manuscript-aesthetic frontend, server-rendered
+
+## Quickstart
+
+```bash
+# 1. install — workspaces hoist to repo root
+npm install
+
+# 2. configure
+cp .env.example .env            # then put MINIMAX_API_KEY=… in there
+
+# 3. seed a world
+npm run genesis "A kingdom where the king has been dying for forty years."
+
+# (prints the world id; copy it)
+
+# 4. run a tick
+npm run tick <worldId>
+
+# 5. or run the loop (every 15 minutes by default; override WORLD_TICK_INTERVAL_SECONDS)
+npm run dev:tick <worldId>
+
+# 6. read the chronicle
+npm run dev:web                 # then open http://localhost:3000
+```
+
+A few helpful side commands:
+
+```bash
+npm run dump                    # list all worlds
+npm run dump <worldId>          # dump the chronicle as markdown to stdout
+```
 
 ## Status
 
-Pre-implementation. The repo currently contains the design and the working contract; code lands next.
+The engine and frontend are wired end-to-end. Genesis seeds a world, the tick
+loop produces chronicle entries, and the Next.js site reads from the same
+SQLite file. The map screen is a placeholder gazetteer (the painted-map
+treatment from the prototype handoff is not yet ported).
 
 ## Read next
 
 - [`DESIGN.md`](./DESIGN.md) — architecture, state model, tick loop, evals.
 - [`AGENTS.md`](./AGENTS.md) — operational contract for anyone (human or agent) writing code here. Read before opening a PR.
+- [`design/`](./design/) — the original prototype handoff (HTML/JSX). Reference for the visual system.

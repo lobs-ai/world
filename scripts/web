@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Start the Next.js dev server on http://localhost:3000.
+# The site reads directly from the SQLite db; no API key needed.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+require_node
+ensure_install
+ensure_app_built
+
+step "starting the chronicle on http://localhost:3000"
+exec npm run --silent --workspace=web dev

@@ -1,0 +1,28 @@
+{
+  "name": "@world/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "genesis": "tsx src/cli/genesis.ts",
+    "tick": "tsx src/cli/tick.ts",
+    "tick:loop": "tsx src/cli/loop.ts",
+    "dump": "tsx src/cli/dump.ts"
+  },
+  "dependencies": {
+    "@agentic/llm": "file:../../agentic/packages/llm",
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.19.39",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Wipe the local database. Asks for confirmation. Does not touch .env or code.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+DB="$ROOT/${WORLD_DB:-data/world.db}"
+load_env
+DB="$ROOT/${WORLD_DB:-data/world.db}"
+
+if [[ ! -f "$DB" ]]; then
+  ok "no database at $DB — nothing to reset"
+  exit 0
+fi
+
+echo "$(color_yellow "About to delete:") $DB"
+echo "Sibling files (-wal, -shm, -journal) will also be removed."
+printf "Type %s to confirm: " "$(color_red "delete")"
+read -r answer
+if [[ "$answer" != "delete" ]]; then
+  err "cancelled"
+  exit 1
+fi
+
+rm -f "$DB" "$DB-wal" "$DB-shm" "$DB-journal"
+ok "database wiped"

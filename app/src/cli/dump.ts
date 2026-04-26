@@ -1,0 +1,42 @@
+// Dump a world's chronicle entries to stdout. Useful for sanity checks.
+
+import { getConfig } from "../config.js";
+import { openDb } from "../db/index.js";
+
+function main(): void {
+  const args = process.argv.slice(2);
+  const worldId = args[0];
+  if (!worldId) {
+    const db = openDb(getConfig().dbPath);
+    const worlds = db.listWorlds();
+    if (worlds.length === 0) {
+      console.error("no worlds");
+      process.exit(0);
+    }
+    for (const w of worlds) {
+      console.log(`${w.id}\t${w.name}\ttick=${w.tick}\t${w.premise}`);
+    }
+    return;
+  }
+  const db = openDb(getConfig().dbPath);
+  const w = db.getWorld(worldId);
+  if (!w) {
+    console.error(`world ${worldId} not found`);
+    process.exit(1);
+  }
+  console.log(`# ${w.name}`);
+  console.log(`Premise: ${w.premise}`);
+  console.log(`Tick ${w.tick} — ${w.inWorldDate}\n`);
+  const entries = db.listEntries(worldId, 50).reverse();
+  for (const e of entries) {
+    console.log(`## ${e.title}`);
+    console.log(`*${e.inWorldDate}, ${e.timeOfDay}. ${e.weather}.*\n`);
+    for (const p of e.paragraphs) {
+      console.log(p.text);
+      console.log();
+    }
+    console.log("---\n");
+  }
+}
+
+main();

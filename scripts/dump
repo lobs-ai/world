@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Dump a world's chronicle as markdown to stdout. With no argument, lists
+# all worlds.
+#
+# Usage:
+#   ./scripts/dump                # list worlds
+#   ./scripts/dump <worldId>      # dump that world's chronicle
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+require_node
+ensure_install
+ensure_app_built
+
+if [[ $# -eq 0 ]]; then
+  npm run --silent --workspace=app dump
+else
+  npm run --silent --workspace=app dump -- "$1"
+fi

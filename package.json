@@ -1,0 +1,21 @@
+{
+  "name": "world",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A persistent, agent-driven medieval fantasy world that reads like an unfolding story.",
+  "workspaces": [
+    "app",
+    "web"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=web",
+    "dev:tick": "npm run tick:loop --workspace=app",
+    "genesis": "npm run genesis --workspace=app",
+    "tick": "npm run tick --workspace=app",
+    "build": "npm run build --workspace=app && npm run build --workspace=web",
+    "typecheck": "npm run typecheck --workspace=app && npm run typecheck --workspace=web"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -34,17 +34,18 @@ These are non-negotiable. Violating them will silently break the project.
 
 ```
 /app
-  /api          FastAPI routes — world creation, tick trigger, read endpoints
-  /agents       Director, Character, Scribe — one module each
-  /world        State model, validators, knowledge propagation, memory decay
-  /genesis      World genesis pipeline (premise → seeded world)
-  /scribe       Prose rendering and chronicle composition
-  /db           SQLAlchemy models and migrations
-  /prompts      All system prompts as .md files, version-controlled
-/web            Next.js frontend
-/scripts        One-off scripts (seed dev world, replay tick, dump chronicle)
-/tests          Unit tests for validators, integration tests for the tick loop
-/evals          Narrative quality evals (see "Evals" below)
+  /src
+    /agents     Director, Character, Scribe — one module each
+    /world      State types, schemas (zod), validators, applier
+    /genesis    Premise → seeded world (one LLM call, transactional commit)
+    /db         SQLite schema + repository (better-sqlite3)
+    /prompts    All system prompts as .md files, version-controlled
+    /llm        Wrapper around @agentic/llm
+    /cli        genesis / tick / loop / dump entry points
+    tick.ts     The tick loop — one entry per file
+/web            Next.js frontend (server components reading from SQLite)
+/design         Original prototype handoff (HTML/JSX, reference only)
+/data           SQLite database file (gitignored)
 DESIGN.md
 AGENTS.md
 README.md
@@ -58,14 +59,19 @@ Keep this layout. Don't create a `utils/` dump. If something doesn't fit, propos
 
 Don't relitigate these without an explicit ask from the human.
 
-- **Python 3.11+** for the backend.
-- **FastAPI** for HTTP.
-- **SQLAlchemy 2.0** + **Alembic** for the database.
-- **Postgres** in production, **SQLite** for local dev. Schema must work on both.
-- **Pydantic v2** for all LLM I/O schemas. Every LLM output is parsed into a Pydantic model before use.
-- **Anthropic Python SDK** for LLM calls. Use Sonnet for character + scribe agents, Opus for the director and the weekly chapter.
-- **Next.js (App Router) + Tailwind** for the frontend. Server-rendered. No heavy client state.
-- **APScheduler** or a simple cron-style worker for the tick loop. No Celery, no Redis, not yet.
+- **Node 20+ / TypeScript** end-to-end. The repo is an npm workspace with two
+  packages: `app/` (the engine) and `web/` (the chronicle frontend).
+- **`@agentic/llm`** (file: dependency on `~/other/lobs/agentic`) for all LLM
+  calls. Provider is **Minimax** (`minimax/MiniMax-M2.7` by default; see
+  `.env.example`). API key in `MINIMAX_API_KEY`.
+- **Zod** for all LLM I/O schemas. Every LLM output is parsed against a Zod
+  schema before any state change touches the database.
+- **better-sqlite3** for storage. Single-file SQLite DB at `data/world.db`.
+  No ORM. Hand-rolled prepared statements in `app/src/db/index.ts`.
+- **Next.js (App Router) + plain CSS** for the frontend. Server components
+  read directly from SQLite. No heavy client state.
+- **Tick loop** is a plain Node process (`npm run tick:loop <worldId>`).
+  No Celery, no cron daemon, not yet.
 
 ---
 
@@ -99,12 +105,11 @@ Don't, unless the human has explicitly asked. The three-agent design is load-bea
 
 This is the most common kind of change. The recipe:
 
-1. Define the Pydantic model in `world/state_changes.py`.
-2. Add a validator in `world/validators.py`.
-3. Add an applier in `world/apply.py`.
-4. Add a knowledge propagation rule in `world/propagation.py` (who learns about this?).
-5. Update the character agent's output schema if characters can propose this change.
-6. Add a unit test covering valid + invalid cases.
+1. Define the type in `app/src/world/types.ts` and add it to the `StateChange` union.
+2. Add a Zod variant to the discriminated union in `app/src/world/schemas.ts`.
+3. Add a validator branch in `app/src/world/validators.ts`.
+4. Add an applier branch in `app/src/world/apply.ts`.
+5. Update `app/src/prompts/character.md` to teach the agent when to propose it.
 
 Skipping any of these will produce subtle world incoherence weeks later.
 
@@ -112,26 +117,26 @@ Skipping any of these will produce subtle world incoherence weeks later.
 
 ## The tick loop is sacred
 
-The order of operations in `world/tick.py` is:
+The order of operations in `app/src/tick.ts` is:
 
 ```
-direct → act → render → validate → commit → propagate → decay → chronicle → reconsider
+direct → act → render → validate → commit → propagate → decay → chronicle
 ```
 
 Don't reorder these. Don't merge steps. Don't let a later step write data that an earlier step depends on. The loop is a pipeline; treat it as one.
 
-If a tick fails partway through, the entire tick rolls back. Partial ticks corrupt the world. Use a single transaction per tick.
+If a tick fails partway through, the entire tick rolls back. Partial ticks corrupt the world. The applier branch in `tick.ts` wraps the commit phase in a single SQLite transaction.
 
 ---
 
 ## Working with prompts
 
-Prompts live in `/app/prompts/`:
+Prompts live in `app/src/prompts/`:
 
 - `director.md` — narrative selection. The single most important file in the repo. Iterate carefully.
 - `character.md` — desire-driven action with required `thought` field.
 - `scribe.md` — voice and prose style.
-- `genesis/*.md` — one-off prompts for world creation.
+- `genesis.md` — one-off prompt for world creation.
 
 Rules:
 
@@ -160,9 +165,9 @@ Run `make evals` before any PR that touches `/app/prompts/` or `/app/agents/`. I
 
 A change is done when:
 
-- Tests pass (`make test`).
-- Evals pass or the regression is documented and accepted (`make evals`).
-- A local dev world can run 20 ticks without raising or producing an invalid state (`make smoke`).
+- `npm run typecheck` passes for both `app/` and `web/`.
+- A local dev world can run several ticks without raising or producing an
+  invalid state (`npm run tick <worldId>` repeatedly, then `npm run dump <worldId>`).
 - The change is reflected in `DESIGN.md` if it's architectural.
 - The PR description explains the *why*, not just the *what*.
 

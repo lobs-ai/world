@@ -1,0 +1,129 @@
+-- World schema. Single SQLite file. All TEXT/INTEGER/REAL — no JSON helpers.
+-- Complex fields are JSON-encoded text.
+
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS worlds (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  premise       TEXT NOT NULL,
+  tone          TEXT NOT NULL,
+  themes        TEXT NOT NULL,           -- JSON array
+  era           TEXT NOT NULL,
+  in_world_date TEXT NOT NULL,
+  tick          INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS locations (
+  id          TEXT NOT NULL,
+  world_id    TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL,
+  description TEXT NOT NULL,
+  weather     TEXT NOT NULL,
+  PRIMARY KEY (world_id, id),
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS characters (
+  id        TEXT NOT NULL,
+  world_id  TEXT NOT NULL,
+  name      TEXT NOT NULL,
+  epithet   TEXT NOT NULL,
+  age       INTEGER NOT NULL,
+  where_id  TEXT NOT NULL,                -- location id
+  portrait  TEXT NOT NULL,
+  summary   TEXT NOT NULL,
+  mood      TEXT NOT NULL,                -- JSON
+  desires   TEXT NOT NULL,                -- JSON array
+  traits    TEXT NOT NULL,                -- JSON object
+  alive     INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (world_id, id),
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS relationships (
+  world_id     TEXT NOT NULL,
+  from_id      TEXT NOT NULL,
+  to_id        TEXT NOT NULL,
+  type_from_me TEXT NOT NULL,
+  affection    REAL NOT NULL,
+  trust        REAL NOT NULL,
+  note         TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (world_id, from_id, to_id),
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS plots (
+  id        TEXT NOT NULL,
+  world_id  TEXT NOT NULL,
+  title     TEXT NOT NULL,
+  state     TEXT NOT NULL,
+  tension   REAL NOT NULL,
+  arc       TEXT NOT NULL,
+  central   TEXT NOT NULL,                -- JSON array of character ids
+  themes    TEXT NOT NULL,                -- JSON array
+  hooks     TEXT NOT NULL,                -- JSON array
+  beats     TEXT NOT NULL DEFAULT '[]',   -- JSON array of beats
+  PRIMARY KEY (world_id, id),
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS memories (
+  id            TEXT PRIMARY KEY,
+  world_id      TEXT NOT NULL,
+  character_id  TEXT NOT NULL,
+  weight        REAL NOT NULL,
+  text          TEXT NOT NULL,
+  tick_learned  INTEGER NOT NULL,
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_character
+  ON memories(world_id, character_id);
+
+CREATE TABLE IF NOT EXISTS rumors (
+  id           TEXT PRIMARY KEY,
+  world_id     TEXT NOT NULL,
+  location_id  TEXT NOT NULL,
+  text         TEXT NOT NULL,
+  truth        REAL NOT NULL,
+  tick_planted INTEGER NOT NULL,
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_rumors_location
+  ON rumors(world_id, location_id);
+
+CREATE TABLE IF NOT EXISTS chronicle_entries (
+  id              TEXT PRIMARY KEY,
+  world_id        TEXT NOT NULL,
+  tick            INTEGER NOT NULL,
+  in_world_date   TEXT NOT NULL,
+  time_of_day     TEXT NOT NULL,
+  weather         TEXT NOT NULL,
+  title           TEXT NOT NULL,
+  plot_ids        TEXT NOT NULL,          -- JSON array
+  location_ids    TEXT NOT NULL,          -- JSON array
+  character_ids   TEXT NOT NULL,          -- JSON array
+  paragraphs      TEXT NOT NULL,          -- JSON array
+  created_at      TEXT NOT NULL,
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chronicle_world_tick
+  ON chronicle_entries(world_id, tick DESC);
+
+CREATE TABLE IF NOT EXISTS tick_log (
+  world_id   TEXT NOT NULL,
+  tick       INTEGER NOT NULL,
+  ok         INTEGER NOT NULL,
+  duration_ms INTEGER NOT NULL,
+  notes      TEXT NOT NULL DEFAULT '',
+  ran_at     TEXT NOT NULL,
+  PRIMARY KEY (world_id, tick),
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);

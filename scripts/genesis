@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Seed a new world from a one-sentence premise.
+#
+# Usage:
+#   ./scripts/genesis "A kingdom where the king has been dying for forty years."
+#   ./scripts/genesis                   # prompts for premise
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+require_node
+require_minimax_key
+ensure_install
+ensure_app_built
+
+premise="${*:-}"
+if [[ -z "$premise" ]]; then
+  printf "%s " "$(color_blue "premise>")"
+  read -r premise
+fi
+if [[ -z "$premise" ]]; then
+  err "no premise given"
+  exit 2
+fi
+
+step "seeding a world from: $(color_dim "$premise")"
+echo "  (one LLM call; takes ~20–40 seconds)"
+npm run --silent --workspace=app genesis -- "$premise"
+ok "world seeded"
+echo
+echo "Next:"
+echo "  ./scripts/tick      # produce the first chronicle entry"
+echo "  ./scripts/web       # open the site"
