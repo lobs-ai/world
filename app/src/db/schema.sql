@@ -49,9 +49,6 @@ CREATE TABLE IF NOT EXISTS characters (
   FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_characters_weight
-  ON characters(world_id, weight);
-
 CREATE TABLE IF NOT EXISTS relationships (
   world_id     TEXT NOT NULL,
   from_id      TEXT NOT NULL,
@@ -81,9 +78,6 @@ CREATE TABLE IF NOT EXISTS plots (
   PRIMARY KEY (world_id, id),
   FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
 );
-
-CREATE INDEX IF NOT EXISTS idx_plots_tier
-  ON plots(world_id, tier);
 
 CREATE TABLE IF NOT EXISTS factions (
   id                  TEXT NOT NULL,

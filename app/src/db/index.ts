@@ -106,6 +106,11 @@ function migrate(raw: Database.Database): void {
   ensureColumn(raw, "chronicle_entries", "beat_type", "beat_type TEXT NOT NULL DEFAULT 'rising'");
   ensureColumn(raw, "chronicle_entries", "faction_ids", "faction_ids TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(raw, "chronicle_entries", "prophecy_ids", "prophecy_ids TEXT NOT NULL DEFAULT '[]'");
+
+  // Indexes on migrated columns must be created after ensureColumn — for an
+  // older DB the column doesn't exist yet when schema.sql runs.
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_characters_weight ON characters(world_id, weight)`);
+  raw.exec(`CREATE INDEX IF NOT EXISTS idx_plots_tier ON plots(world_id, tier)`);
 }
 
 const EMPTY_DEEP_HISTORY: DeepHistory = {

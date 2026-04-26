@@ -83,7 +83,7 @@ function makeFrameSummary(f: GenesisFrame): FrameSummary {
 async function runFrame(opts: GenesisOptions): Promise<GenesisFrame> {
   const system = loadPrompt("genesis_frame");
   const user = `Premise: ${opts.premise.trim()}\n${opts.tone ? `Tone hint: ${opts.tone}\n` : ""}Produce the world frame. Return only the fenced JSON block.`;
-  const raw = await callGenesis({ system, user, maxTokens: 8192 });
+  const raw = await callGenesis({ system, user, maxTokens: 32768 });
   return genesisFrameSchema.parse(extractJson(raw));
 }
 
@@ -94,7 +94,7 @@ async function runSecondaries(
   const system = loadPrompt("genesis_secondaries");
   const summary = makeFrameSummary(frame);
   const user = `Premise: ${premise}\n\nThe world has been framed. Produce the secondaries.\n\nFrame:\n\`\`\`json\n${JSON.stringify(summary, null, 2)}\n\`\`\`\n\nReturn only the fenced JSON.`;
-  const raw = await callGenesis({ system, user, maxTokens: 8192 });
+  const raw = await callGenesis({ system, user, maxTokens: 32768 });
   return genesisSecondariesSchema.parse(extractJson(raw));
 }
 
@@ -117,12 +117,16 @@ async function runAtmospherics(
     })),
   };
   const user = `Premise: ${premise}\n\nThe world has been framed and the secondaries placed. Produce the atmospheric population.\n\nWorld:\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\`\n\nReturn only the fenced JSON.`;
-  const raw = await callGenesis({ system, user, maxTokens: 8192 });
+  const raw = await callGenesis({ system, user, maxTokens: 32768 });
   return genesisAtmosphericsSchema.parse(extractJson(raw));
 }
 
 export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
+  const totalStages = opts.framedOnly ? 1 : 3;
+  console.error(`  [1/${totalStages}] framing world (locations, factions, principals, plots, prophecies)…`);
+  const t0 = Date.now();
   const frame = await runFrame(opts);
+  console.error(`        frame complete in ${((Date.now() - t0) / 1000).toFixed(1)}s — ${frame.locations.length} loc, ${frame.factions.length} fac, ${frame.characters.length} principals, ${frame.plots.length} plots`);
 
   // ── Stage 1 cross-checks ────────────────────────────────────────────
   const locIds = new Set(frame.locations.map((l) => l.id));
@@ -175,7 +179,10 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
   // ── Stage 2 ─────────────────────────────────────────────────────────
   let secondaries: GenesisSecondaries = { characters: [], relationships: [] };
   if (!opts.framedOnly) {
+    console.error(`  [2/${totalStages}] generating secondary characters…`);
+    const t1 = Date.now();
     secondaries = await runSecondaries(opts.premise, frame);
+    console.error(`        secondaries complete in ${((Date.now() - t1) / 1000).toFixed(1)}s — ${secondaries.characters.length} characters`);
     for (const c of secondaries.characters) {
       if (c.weight !== "secondary")
         throw new Error(`Genesis secondaries: ${c.id} must be secondary, got ${c.weight}`);
@@ -196,7 +203,10 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
   // ── Stage 3 ─────────────────────────────────────────────────────────
   let atmospherics: GenesisAtmospherics = { characters: [], relationships: [] };
   if (!opts.framedOnly) {
+    console.error(`  [3/${totalStages}] generating atmospheric NPCs…`);
+    const t2 = Date.now();
     atmospherics = await runAtmospherics(opts.premise, frame, secondaries);
+    console.error(`        atmospherics complete in ${((Date.now() - t2) / 1000).toFixed(1)}s — ${atmospherics.characters.length} characters`);
     for (const c of atmospherics.characters) {
       if (c.weight !== "atmospheric")
         throw new Error(`Genesis atmospherics: ${c.id} must be atmospheric, got ${c.weight}`);
