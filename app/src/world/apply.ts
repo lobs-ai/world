@@ -94,5 +94,114 @@ export function applyChange(db: Db, worldId: WorldId, change: StateChange, tick:
       });
       return;
     }
+    case "prophecy_echoed": {
+      // A character (or beat) has touched the prophecy. We bump the echoes
+      // counter and, if it is still unfulfilled, move it to "echoing".
+      // The director / scribe is what drives further status moves.
+      const pr = db.getProphecy(worldId, change.prophecyId);
+      if (!pr) return;
+      pr.echoes = pr.echoes + 1;
+      if (pr.status === "unfulfilled") pr.status = "echoing";
+      db.updateProphecy(pr);
+      return;
+    }
+    case "character_died": {
+      const c = db.getCharacter(worldId, change.characterId);
+      if (!c) return;
+      c.alive = false;
+      db.updateCharacter(c);
+      // The cause becomes a heavy memory shared by the actor — but we
+      // don't know who that is at this layer; the character agent that
+      // proposed this should also propose a memory_formed for itself.
+      return;
+    }
+    case "oath_sworn": {
+      const c = db.getCharacter(worldId, change.characterId);
+      if (!c) return;
+      c.desires = [
+        ...c.desires.filter((d) => d.goal !== change.vow),
+        { goal: change.vow, intensity: 1.0 },
+      ].slice(-4);
+      db.updateCharacter(c);
+      // A heavy memory marks the moment the oath was bound.
+      db.insertMemory({
+        id: randomUUID(),
+        worldId,
+        characterId: change.characterId,
+        weight: 0.95,
+        text: `Sworn: ${change.vow}` + (change.beforeWhom ? ` (before ${change.beforeWhom})` : ""),
+        tickLearned: tick,
+      });
+      return;
+    }
+    case "secret_revealed": {
+      const c = db.getCharacter(worldId, change.characterId);
+      if (!c) return;
+      const secret = c.secrets[change.secretIndex];
+      if (!secret) return;
+      c.secrets = c.secrets.filter((_, i) => i !== change.secretIndex);
+      db.updateCharacter(c);
+      // The secret leaves private state: it becomes a rumour at the
+      // scene's location with high truth (these are confessions, not
+      // gossip).
+      // The applier doesn't know the scene location directly, but the
+      // tick caller passes it via the "rumor_planted" change typically.
+      // Here we just plant at the character's current `where` since
+      // they are physically present there.
+      db.insertRumor({
+        id: randomUUID(),
+        worldId,
+        locationId: c.where,
+        text: secret,
+        truth: change.asRumourTruth ?? 0.95,
+        tickPlanted: tick,
+      });
+      // Heavy memory for the speaker.
+      db.insertMemory({
+        id: randomUUID(),
+        worldId,
+        characterId: change.characterId,
+        weight: 0.9,
+        text: `Spoke aloud what had been kept: ${secret}`,
+        tickLearned: tick,
+      });
+      return;
+    }
+    case "faction_changed": {
+      const c = db.getCharacter(worldId, change.characterId);
+      if (!c) return;
+      c.factionId = change.toFactionId ?? undefined;
+      db.updateCharacter(c);
+      db.insertMemory({
+        id: randomUUID(),
+        worldId,
+        characterId: change.characterId,
+        weight: 0.85,
+        text: `Changed banner: ${change.reason}`,
+        tickLearned: tick,
+      });
+      return;
+    }
+    case "plot_deflected": {
+      const plot = db.getPlot(worldId, change.plotId);
+      if (!plot) return;
+      plot.arc = change.newArc;
+      if (typeof change.newTension === "number") {
+        plot.tension = clamp(change.newTension, 0, 1);
+      }
+      if (change.newState) plot.state = change.newState;
+      plot.lastAdvancedTick = tick;
+      db.updatePlot(plot);
+      // A heavy memory for the deflector — the deed sits on them.
+      db.insertMemory({
+        id: randomUUID(),
+        worldId,
+        characterId: change.characterId,
+        weight: 0.95,
+        text: `Bent the thread: ${change.why}`,
+        tickLearned: tick,
+      });
+      return;
+    }
   }
 }

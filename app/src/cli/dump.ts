@@ -29,10 +29,12 @@ function main(): void {
   console.log(`Tick ${w.tick} — ${w.inWorldDate}\n`);
   const entries = db.listEntries(worldId, 50).reverse();
   for (const e of entries) {
-    console.log(`## ${e.title}`);
+    const tag = e.beatType === "world_report" ? " — *report*" : "";
+    console.log(`## ${e.title}${tag}`);
     console.log(`*${e.inWorldDate}, ${e.timeOfDay}. ${e.weather}.*\n`);
     for (const p of e.paragraphs) {
-      console.log(p.text);
+      if (p.kind === "aside") console.log(`> ${p.text}`);
+      else console.log(p.text);
       console.log();
     }
     console.log("---\n");

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS worlds (
   era           TEXT NOT NULL,
   in_world_date TEXT NOT NULL,
   tick          INTEGER NOT NULL DEFAULT 0,
+  deep_history  TEXT NOT NULL DEFAULT '{}',
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
 );
@@ -29,21 +30,27 @@ CREATE TABLE IF NOT EXISTS locations (
 );
 
 CREATE TABLE IF NOT EXISTS characters (
-  id        TEXT NOT NULL,
-  world_id  TEXT NOT NULL,
-  name      TEXT NOT NULL,
-  epithet   TEXT NOT NULL,
-  age       INTEGER NOT NULL,
-  where_id  TEXT NOT NULL,                -- location id
-  portrait  TEXT NOT NULL,
-  summary   TEXT NOT NULL,
-  mood      TEXT NOT NULL,                -- JSON
-  desires   TEXT NOT NULL,                -- JSON array
-  traits    TEXT NOT NULL,                -- JSON object
-  alive     INTEGER NOT NULL DEFAULT 1,
+  id          TEXT NOT NULL,
+  world_id    TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  epithet     TEXT NOT NULL,
+  age         INTEGER NOT NULL,
+  where_id    TEXT NOT NULL,                -- location id
+  weight      TEXT NOT NULL DEFAULT 'principal',
+  faction_id  TEXT,
+  portrait    TEXT NOT NULL,
+  summary     TEXT NOT NULL,
+  mood        TEXT NOT NULL,                -- JSON
+  desires     TEXT NOT NULL,                -- JSON array
+  traits      TEXT NOT NULL,                -- JSON object
+  alive       INTEGER NOT NULL DEFAULT 1,
+  secrets     TEXT NOT NULL DEFAULT '[]',    -- JSON array of strings
   PRIMARY KEY (world_id, id),
   FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_characters_weight
+  ON characters(world_id, weight);
 
 CREATE TABLE IF NOT EXISTS relationships (
   world_id     TEXT NOT NULL,
@@ -58,19 +65,60 @@ CREATE TABLE IF NOT EXISTS relationships (
 );
 
 CREATE TABLE IF NOT EXISTS plots (
-  id        TEXT NOT NULL,
-  world_id  TEXT NOT NULL,
-  title     TEXT NOT NULL,
-  state     TEXT NOT NULL,
-  tension   REAL NOT NULL,
-  arc       TEXT NOT NULL,
-  central   TEXT NOT NULL,                -- JSON array of character ids
-  themes    TEXT NOT NULL,                -- JSON array
-  hooks     TEXT NOT NULL,                -- JSON array
-  beats     TEXT NOT NULL DEFAULT '[]',   -- JSON array of beats
+  id                  TEXT NOT NULL,
+  world_id            TEXT NOT NULL,
+  title               TEXT NOT NULL,
+  tier                TEXT NOT NULL DEFAULT 'subplot',
+  state               TEXT NOT NULL,
+  tension             REAL NOT NULL,
+  arc                 TEXT NOT NULL,
+  central             TEXT NOT NULL,                -- JSON array of character ids
+  faction_ids         TEXT NOT NULL DEFAULT '[]',   -- JSON array of faction ids
+  themes              TEXT NOT NULL,                -- JSON array
+  hooks               TEXT NOT NULL,                -- JSON array
+  beats               TEXT NOT NULL DEFAULT '[]',   -- JSON array of beats
+  last_advanced_tick  INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (world_id, id),
   FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_plots_tier
+  ON plots(world_id, tier);
+
+CREATE TABLE IF NOT EXISTS factions (
+  id                  TEXT NOT NULL,
+  world_id            TEXT NOT NULL,
+  name                TEXT NOT NULL,
+  banner              TEXT NOT NULL,
+  summary             TEXT NOT NULL,
+  themes              TEXT NOT NULL DEFAULT '[]',
+  desires             TEXT NOT NULL DEFAULT '[]',   -- JSON
+  tension             REAL NOT NULL DEFAULT 0,
+  last_advanced_tick  INTEGER NOT NULL DEFAULT 0,
+  seat_location_id    TEXT,
+  PRIMARY KEY (world_id, id),
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS prophecies (
+  id                    TEXT NOT NULL,
+  world_id              TEXT NOT NULL,
+  text                  TEXT NOT NULL,
+  source                TEXT NOT NULL,
+  planted_tick          INTEGER NOT NULL,
+  target_payoff_min     INTEGER NOT NULL,
+  target_payoff_max     INTEGER NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'unfulfilled',
+  echoes                INTEGER NOT NULL DEFAULT 0,
+  related_plot_ids      TEXT NOT NULL DEFAULT '[]',
+  related_character_ids TEXT NOT NULL DEFAULT '[]',
+  hidden_meaning        TEXT,
+  PRIMARY KEY (world_id, id),
+  FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_prophecies_status
+  ON prophecies(world_id, status);
 
 CREATE TABLE IF NOT EXISTS memories (
   id            TEXT PRIMARY KEY,
@@ -106,7 +154,10 @@ CREATE TABLE IF NOT EXISTS chronicle_entries (
   time_of_day     TEXT NOT NULL,
   weather         TEXT NOT NULL,
   title           TEXT NOT NULL,
+  beat_type       TEXT NOT NULL DEFAULT 'rising',
   plot_ids        TEXT NOT NULL,          -- JSON array
+  faction_ids     TEXT NOT NULL DEFAULT '[]',
+  prophecy_ids    TEXT NOT NULL DEFAULT '[]',
   location_ids    TEXT NOT NULL,          -- JSON array
   character_ids   TEXT NOT NULL,          -- JSON array
   paragraphs      TEXT NOT NULL,          -- JSON array

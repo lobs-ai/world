@@ -179,6 +179,23 @@ function ParagraphView({
       </p>
     );
   }
+  if (p.kind === "aside") {
+    // Chronicler's aside — distant news. Set apart in voice, not by quotation.
+    return (
+      <p
+        style={{
+          fontStyle: "italic",
+          color: "var(--ink-soft)",
+          letterSpacing: "0.005em",
+          margin: "1em 0",
+          paddingLeft: 16,
+          borderLeft: "1px dotted var(--ink-ghost)",
+        }}
+      >
+        {p.text}
+      </p>
+    );
+  }
   return (
     <p className={isFirst ? "dropcap-illum" : undefined}>
       {p.text}

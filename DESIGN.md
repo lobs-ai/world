@@ -18,6 +18,32 @@ The product is **the chronicle**. Everything else is infrastructure for making t
 
 These principles drove every design decision below. When in doubt, return to them.
 
+### 2.0 The chronicle is a sprawling story, not a chamber play.
+
+The product target is *Wheel of Time* / *Baldur's Gate 3*-scale: a vast
+populous world with one through-line spine, a handful of subplots
+crossing it, ambient slow-burns the camera doesn't always look at, and
+prophecies that take fifty to two hundred entries to pay. Every
+architectural decision below is in service of holding both **scope** and
+**slow-burn** at once.
+
+The four scaffolds that hold up scope:
+
+- **Cast tiers** — `principal | secondary | atmospheric` on every
+  character. Genesis seeds 5–8 principals, 4–7 secondaries, 3–5
+  atmospheric. The director picks focal cast under tier rules.
+- **Plot tiers** — `spine | subplot | ambient` on every plot. Exactly
+  one plot has `tier: "spine"`. The director's cadence is different per
+  tier (spine: every 2–3, subplot: every 4–6, ambient: every 6–10).
+- **Hooks (tactical) vs prophecies (strategic)** — `Plot.hooks` are
+  paid in <10 entries; `Prophecy` rows have committed payoff windows
+  (`targetPayoffMin`/`targetPayoffMax`) of 30–400 entries with a
+  director-only `hiddenMeaning` that the chronicle eventually delivers.
+- **Off-stage world** — the `world_report` beat type lets the chronicler
+  step back and report distant news without a scene cast. Roughly one
+  entry in five. Plus first-class `Faction` rows (with their own
+  desires and tension) so groups have momentum, not just individuals.
+
 ### 2.1 State is structured. Generation is constrained.
 
 LLMs cannot freely edit the world. They propose **typed state changes** in JSON. A validator checks each one (does this character exist? is this location reachable? is this item in their inventory?) before it commits. This is the firewall against incoherence.

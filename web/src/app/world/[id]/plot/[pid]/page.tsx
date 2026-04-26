@@ -26,7 +26,7 @@ export default function PlotPage({
       <div className="page" style={{ position: "relative", zIndex: 1 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <div className="display-sc" style={{ fontSize: 13, color: "var(--ink-faint)", letterSpacing: "0.32em", marginBottom: 12 }}>
-            a thread now running
+            {p.tier === "spine" ? "the spine of the chronicle" : p.tier === "subplot" ? "a thread crossing the spine" : "a slow burn of the realm"}
           </div>
           <h1 className="display" style={{ fontSize: 72, fontStyle: "italic", lineHeight: 1, marginBottom: 16 }}>
             {p.title}

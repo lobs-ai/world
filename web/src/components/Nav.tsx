@@ -3,7 +3,7 @@ import Link from "next/link";
 interface NavProps {
   worldId: string;
   worldName: string;
-  active?: "chronicle" | "map" | "chapter" | null;
+  active?: "chronicle" | "map" | "chapter" | "threads" | "cast" | null;
 }
 
 export function Nav({ worldId, worldName, active }: NavProps) {
@@ -12,6 +12,12 @@ export function Nav({ worldId, worldName, active }: NavProps) {
       <div className="nav-left">
         <Link href={`/world/${worldId}`} className={`nav-link${active === "chronicle" ? " is-active" : ""}`}>
           Chronicle
+        </Link>
+        <Link href={`/world/${worldId}/cast`} className={`nav-link${active === "cast" ? " is-active" : ""}`}>
+          The Cast
+        </Link>
+        <Link href={`/world/${worldId}/threads`} className={`nav-link${active === "threads" ? " is-active" : ""}`}>
+          Threads
         </Link>
         <Link href={`/world/${worldId}/map`} className={`nav-link${active === "map" ? " is-active" : ""}`}>
           The Realm

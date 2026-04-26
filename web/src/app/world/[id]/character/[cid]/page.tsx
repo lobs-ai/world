@@ -43,6 +43,18 @@ export default function CharacterPage({
             <p style={{ fontSize: 18, color: "var(--ink-soft)", maxWidth: "56ch" }}>{c.summary}</p>
             <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
               <span className="tag">{c.age} years</span>
+              <span className={`tag${c.weight === "principal" ? " accent" : ""}`}>
+                {c.weight}
+              </span>
+              {c.factionId && (
+                <Link
+                  href={`/world/${world.id}/faction/${c.factionId}`}
+                  className="tag clickable"
+                  style={{ textDecoration: "none" }}
+                >
+                  {db().getFaction(world.id, c.factionId)?.name ?? c.factionId}
+                </Link>
+              )}
               {place && (
                 <Link href={`/world/${world.id}/location/${place.id}`} className="tag clickable" style={{ textDecoration: "none" }}>
                   at {place.name}
