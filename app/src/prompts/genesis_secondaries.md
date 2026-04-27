@@ -61,7 +61,9 @@ Return one fenced JSON block, exactly:
 - Every `factionId` (if set) must be a valid faction id from the frame.
 - Every relationship's `fromId` and `toId` must be a real character id —
   either a principal from the frame or a secondary you are introducing
-  in this stage.
+  in this stage. **Use these exact keys, not aliases**: `fromId`,
+  `toId`, `typeFromMe`, `affection`, `trust`, `note`. Never `from` /
+  `to` / `type` / `relation`.
 - Aim for **at least one secondary per faction** that anchors that
   faction in scenes where principals are absent.
 - Each secondary has 1–3 desires, 1–2 secrets, and at least one strong

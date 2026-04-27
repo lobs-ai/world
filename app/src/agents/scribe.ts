@@ -5,7 +5,7 @@
 // For a world_report beat there is no character cast and no scene
 // location — the scribe writes a chronicler's-aside paragraph or two.
 
-import { callScribe, extractJson } from "../llm/client.js";
+import { callScribe } from "../llm/client.js";
 import { loadPrompt } from "../prompts/loader.js";
 import {
   scribeOutputSchema,
@@ -16,6 +16,7 @@ import type {
   CharacterActionParsed,
 } from "../world/schemas.js";
 import type { CharacterId, DirectorPlan, WorldId } from "../world/types.js";
+import { runAgent } from "./_runAgent.js";
 
 export interface ScribeInput {
   worldId: WorldId;
@@ -114,11 +115,12 @@ export async function scribe(
     recentTitles: recent,
   };
 
-  const raw = await callScribe({
+  return runAgent({
+    label: "scribe",
+    call: callScribe,
     system: loadPrompt("scribe"),
     user: `Render the next chronicle entry from this material:\n\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\`\n\nReturn one fenced JSON block.`,
-    maxTokens: 2048,
+    schema: scribeOutputSchema,
+    maxTokens: 8000,
   });
-
-  return scribeOutputSchema.parse(extractJson(raw));
 }

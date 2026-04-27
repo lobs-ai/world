@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { Bipole, IntensityBar, Portrait, SectionHead, romanize } from "@/components/Primitives";
 import { Nav } from "@/components/Nav";
+import { imageUrlFromPath } from "@/components/ChronicleImage";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,26 @@ export default function CharacterPage({
 
       <div className="page" style={{ position: "relative", zIndex: 1 }}>
         <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 40, alignItems: "start" }}>
-          <Portrait label={c.portrait} w={180} h={220} />
+          {(() => {
+            const url = imageUrlFromPath(c.imagePath);
+            return url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={url}
+                alt={c.name}
+                style={{
+                  width: 180,
+                  height: 220,
+                  objectFit: "cover",
+                  border: "0.5px solid var(--rule)",
+                  background: "var(--paper-deep)",
+                  display: "block",
+                }}
+              />
+            ) : (
+              <Portrait label={c.portrait} w={180} h={220} />
+            );
+          })()}
           <div>
             <div className="display-sc" style={{ fontSize: 13, color: "var(--ink-faint)", letterSpacing: "0.32em", marginBottom: 10 }}>
               of the {place?.name || "realm"}

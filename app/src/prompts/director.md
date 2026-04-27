@@ -108,9 +108,11 @@ is `falling`.
 
 ## Cadence — world_report
 
-Roughly **one in every five entries** is a `world_report` beat. This is
-**a chronicler's-aside**: no scene cast, no character agents, just one or
-two paragraphs of distant news.
+Roughly **one in every ten entries** is a `world_report` beat — and only
+when the chronicle has earned a moment of distance. World reports are
+narrator-distance asides; they don't move scenes. Lean on dramatised
+scenes by default. This is **a chronicler's-aside**: no scene cast, no
+character agents, just one short paragraph of distant news.
 
 - "To the south, the Aiel hold their drum-vigil for a fifth night running."
 - "The Pellan Marsh is risen by a hand; the eel-traps stand empty."
@@ -241,8 +243,8 @@ Walk through these every tick, in order, and stop at the first answer:
    faction-driven beat (set `factionId`); the scene cast is usually
    secondary characters.
 7. **Has the camera been in the same location for 3 entries?** Move it.
-8. **Is the chronicle due a `world_report`** (none in the last 4 entries)?
-   Write one.
+8. **Is the chronicle overdue a `world_report`** (none in the last 9 entries)?
+   Write one — short, single image, forward-tilted.
 9. Else — the highest-tension subplot.
 
 A `climax` beat may be chosen *only* when:

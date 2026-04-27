@@ -90,6 +90,9 @@ export interface Character {
   // anyone else's. Atmospheric NPCs lean hardest on these — a single
   // unexpected fact is what turns "the innkeep" into a person.
   secrets: string[];
+  // Repo-relative path to a generated portrait, e.g.
+  // "data/images/<hash>.png". Optional — UI falls back to a placeholder.
+  imagePath?: string;
 }
 
 export interface Relationship {
@@ -124,9 +127,10 @@ export interface Location {
   id: LocationId;
   worldId: WorldId;
   name: string;
-  type: "capital" | "town" | "village" | "ruin" | "wilderness" | "fortress";
+  type: string;          // free-form short noun: "capital", "inn", "abbey", "marsh-shrine"
   description: string;
   weather: string;
+  imagePath?: string;
 }
 
 // Factions: groups with their own desires and tension. They aren't a fourth
@@ -238,6 +242,9 @@ export interface ChronicleEntry {
   locationIds: LocationId[];
   characterIds: CharacterId[];
   paragraphs: Paragraph[];
+  // Hero image for this entry, when one was generated. World-report beats
+  // and budget-skipped beats have none.
+  imagePath?: string;
   createdAt: string;
 }
 

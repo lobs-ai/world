@@ -1,27 +1,50 @@
 // Genesis pipeline: premise -> seeded world.
-// Three stages, three LLM calls:
+// Three stages, three LLM calls, each independently parseable, validatable,
+// repairable, and cacheable:
 //   1) Frame      — world meta, deep history, locations, factions,
-//                    principals (5–8), plots, prophecies, principal-only
-//                    relationships.
+//                   principals (5–8), plots, prophecies, principal-only
+//                   relationships.
 //   2) Secondaries — 8–15 recurring characters bound to factions and
 //                    principals.
 //   3) Atmospherics — 15–25 named-but-rare NPCs spread across locations.
-// All output is parsed against tight Zod schemas, referentially
-// cross-checked, and committed in one transaction.
+//
+// On schema or referential failure, the stage is re-prompted with a focused
+// fix-up message (`parseAndRepair`) up to a small bound. On success, the
+// stage is cached to disk so a later-stage failure doesn't lose earlier
+// progress — a retry resumes from the last completed stage. After full
+// commit to the DB, the cache is cleared.
 
 import { randomUUID } from "node:crypto";
-import { callGenesis, extractJson } from "../llm/client.js";
+import { callGenesis } from "../llm/client.js";
 import { loadPrompt } from "../prompts/loader.js";
 import {
   genesisAtmosphericsSchema,
   genesisFrameSchema,
   genesisSecondariesSchema,
+  type GenesisAtmospherics,
   type GenesisFrame,
   type GenesisSecondaries,
-  type GenesisAtmospherics,
 } from "../world/schemas.js";
 import type { Db } from "../db/index.js";
 import type { World } from "../world/types.js";
+import { openStageCache, runIdFor, type StageCache } from "./cache.js";
+import {
+  buildRepairPrompt,
+  parseAndRepair,
+  type RepairIssue,
+} from "../llm/repair.js";
+import {
+  dropStaleRelationships,
+  frameContext,
+  frameIssues,
+  stageCharacterIssues,
+  type FrameContext,
+} from "./refs.js";
+import { imageForCharacter, imageForLocation } from "../images/index.js";
+import type { ZodTypeAny, infer as ZInfer } from "zod";
+
+const MAX_TOKENS = 32768;
+const REPAIR_ATTEMPTS = 3;
 
 export interface GenesisOptions {
   premise: string;
@@ -29,7 +52,11 @@ export interface GenesisOptions {
   tone?: string;
   // skip stage 2/3 — useful for a quick smoke test of just the spine.
   framedOnly?: boolean;
+  // ignore on-disk cache; always re-call every stage.
+  fresh?: boolean;
 }
+
+// ── Frame summary (for downstream stage prompts) ────────────────────────────
 
 interface FrameSummary {
   worldName: string;
@@ -80,30 +107,98 @@ function makeFrameSummary(f: GenesisFrame): FrameSummary {
   };
 }
 
-async function runFrame(opts: GenesisOptions): Promise<GenesisFrame> {
-  const system = loadPrompt("genesis_frame");
-  const user = `Premise: ${opts.premise.trim()}\n${opts.tone ? `Tone hint: ${opts.tone}\n` : ""}Produce the world frame. Return only the fenced JSON block.`;
-  const raw = await callGenesis({ system, user, maxTokens: 32768 });
-  return genesisFrameSchema.parse(extractJson(raw));
+// ── Stage runner ────────────────────────────────────────────────────────────
+
+interface StageRunArgs<S extends ZodTypeAny> {
+  cache: StageCache;
+  stageName: string;
+  schema: S;
+  label: string;
+  buildPrompt: () => { system: string; user: string };
+  extraIssues?: (parsed: ZInfer<S>) => RepairIssue[];
+  log: (msg: string) => void;
 }
 
-async function runSecondaries(
-  premise: string,
+async function runStage<S extends ZodTypeAny>(
+  args: StageRunArgs<S>,
+): Promise<ZInfer<S>> {
+  if (args.cache.has(args.stageName)) {
+    args.log(`        ↳ resuming "${args.stageName}" from cache`);
+    return args.cache.read<ZInfer<S>>(args.stageName) as ZInfer<S>;
+  }
+
+  const { system, user } = args.buildPrompt();
+  const initialRaw = await callGenesis({
+    system,
+    user,
+    maxTokens: MAX_TOKENS,
+  });
+
+  const parsed = await parseAndRepair<S>({
+    label: args.label,
+    schema: args.schema,
+    initialRaw,
+    extraIssues: args.extraIssues,
+    maxAttempts: REPAIR_ATTEMPTS,
+    onAttempt: (attempt, issues, accepted) => {
+      if (accepted) {
+        if (attempt > 1) {
+          args.log(`        ✓ repaired on attempt ${attempt}/${REPAIR_ATTEMPTS}`);
+        }
+        return;
+      }
+      if (attempt < REPAIR_ATTEMPTS) {
+        args.log(
+          `        ✗ attempt ${attempt}/${REPAIR_ATTEMPTS}: ${issues.length} issue${issues.length === 1 ? "" : "s"} — re-prompting`,
+        );
+      }
+    },
+    repair: async (previousRaw, issues) => {
+      const repairUser = buildRepairPrompt(previousRaw, issues);
+      return callGenesis({
+        system,
+        user: repairUser,
+        maxTokens: MAX_TOKENS,
+      });
+    },
+  });
+
+  args.cache.write(args.stageName, parsed);
+  return parsed;
+}
+
+// ── Stage prompt builders ───────────────────────────────────────────────────
+
+function framePrompt(opts: GenesisOptions): { system: string; user: string } {
+  return {
+    system: loadPrompt("genesis_frame"),
+    user:
+      `Premise: ${opts.premise.trim()}\n` +
+      (opts.tone ? `Tone hint: ${opts.tone}\n` : "") +
+      `Produce the world frame. Return only the fenced JSON block.`,
+  };
+}
+
+function secondariesPrompt(
+  opts: GenesisOptions,
   frame: GenesisFrame,
-): Promise<GenesisSecondaries> {
-  const system = loadPrompt("genesis_secondaries");
+): { system: string; user: string } {
   const summary = makeFrameSummary(frame);
-  const user = `Premise: ${premise}\n\nThe world has been framed. Produce the secondaries.\n\nFrame:\n\`\`\`json\n${JSON.stringify(summary, null, 2)}\n\`\`\`\n\nReturn only the fenced JSON.`;
-  const raw = await callGenesis({ system, user, maxTokens: 32768 });
-  return genesisSecondariesSchema.parse(extractJson(raw));
+  return {
+    system: loadPrompt("genesis_secondaries"),
+    user:
+      `Premise: ${opts.premise}\n\n` +
+      `The world has been framed. Produce the secondaries.\n\n` +
+      `Frame:\n\`\`\`json\n${JSON.stringify(summary, null, 2)}\n\`\`\`\n\n` +
+      `Return only the fenced JSON.`,
+  };
 }
 
-async function runAtmospherics(
-  premise: string,
+function atmosphericsPrompt(
+  opts: GenesisOptions,
   frame: GenesisFrame,
   secondaries: GenesisSecondaries,
-): Promise<GenesisAtmospherics> {
-  const system = loadPrompt("genesis_atmospherics");
+): { system: string; user: string } {
   const summary = makeFrameSummary(frame);
   const ctx = {
     ...summary,
@@ -116,115 +211,105 @@ async function runAtmospherics(
       summary: c.summary,
     })),
   };
-  const user = `Premise: ${premise}\n\nThe world has been framed and the secondaries placed. Produce the atmospheric population.\n\nWorld:\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\`\n\nReturn only the fenced JSON.`;
-  const raw = await callGenesis({ system, user, maxTokens: 32768 });
-  return genesisAtmosphericsSchema.parse(extractJson(raw));
+  return {
+    system: loadPrompt("genesis_atmospherics"),
+    user:
+      `Premise: ${opts.premise}\n\n` +
+      `The world has been framed and the secondaries placed. Produce the atmospheric population.\n\n` +
+      `World:\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\`\n\n` +
+      `Return only the fenced JSON.`,
+  };
 }
 
+// ── Orchestration ───────────────────────────────────────────────────────────
+
 export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
+  const runId = runIdFor(opts.premise);
+  const cache = openStageCache(runId);
+  if (opts.fresh) cache.clear();
+
+  const log = (m: string) => console.error(m);
   const totalStages = opts.framedOnly ? 1 : 3;
-  console.error(`  [1/${totalStages}] framing world (locations, factions, principals, plots, prophecies)…`);
+
+  // ── Stage 1: frame ────────────────────────────────────────────────────────
+  log(`  [1/${totalStages}] framing world (locations, factions, principals, plots, prophecies)…`);
   const t0 = Date.now();
-  const frame = await runFrame(opts);
-  console.error(`        frame complete in ${((Date.now() - t0) / 1000).toFixed(1)}s — ${frame.locations.length} loc, ${frame.factions.length} fac, ${frame.characters.length} principals, ${frame.plots.length} plots`);
+  const frame = await runStage({
+    cache,
+    stageName: "frame",
+    schema: genesisFrameSchema,
+    label: "Genesis frame",
+    buildPrompt: () => framePrompt(opts),
+    extraIssues: (f) => frameIssues(f),
+    log,
+  });
+  log(
+    `        frame complete in ${((Date.now() - t0) / 1000).toFixed(1)}s — ` +
+      `${frame.locations.length} loc, ${frame.factions.length} fac, ` +
+      `${frame.characters.length} principals, ${frame.plots.length} plots`,
+  );
 
-  // ── Stage 1 cross-checks ────────────────────────────────────────────
-  const locIds = new Set(frame.locations.map((l) => l.id));
-  const factionIds = new Set(frame.factions.map((f) => f.id));
-  const charIds = new Set(frame.characters.map((c) => c.id));
-  const plotIds = new Set(frame.plots.map((p) => p.id));
-
-  for (const c of frame.characters) {
-    if (c.weight !== "principal")
-      throw new Error(`Genesis frame: character ${c.id} must be principal, got ${c.weight}`);
-    if (!locIds.has(c.where))
-      throw new Error(`Genesis frame: character ${c.id} placed at unknown location ${c.where}`);
-    if (c.factionId && !factionIds.has(c.factionId))
-      throw new Error(`Genesis frame: character ${c.id} affiliated with unknown faction ${c.factionId}`);
-  }
-  for (const f of frame.factions) {
-    if (f.seatLocationId && !locIds.has(f.seatLocationId))
-      throw new Error(`Genesis frame: faction ${f.id} seated at unknown location ${f.seatLocationId}`);
-  }
-  for (const p of frame.plots) {
-    for (const cid of p.central) {
-      if (!charIds.has(cid))
-        throw new Error(`Genesis frame: plot ${p.id} references unknown character ${cid}`);
-    }
-    for (const fid of p.factionIds) {
-      if (!factionIds.has(fid))
-        throw new Error(`Genesis frame: plot ${p.id} references unknown faction ${fid}`);
-    }
-  }
-  for (const pr of frame.prophecies) {
-    for (const pid of pr.relatedPlotIds) {
-      if (!plotIds.has(pid))
-        throw new Error(`Genesis frame: prophecy ${pr.id} references unknown plot ${pid}`);
-    }
-    for (const cid of pr.relatedCharacterIds) {
-      if (!charIds.has(cid))
-        throw new Error(`Genesis frame: prophecy ${pr.id} references unknown character ${cid}`);
-    }
-    if (pr.targetPayoffMax <= pr.targetPayoffMin)
-      throw new Error(`Genesis frame: prophecy ${pr.id} has empty payoff window`);
-  }
-  for (const r of frame.relationships) {
-    if (!charIds.has(r.fromId) || !charIds.has(r.toId))
-      throw new Error(`Genesis frame: relationship references unknown character`);
-  }
-  const spinePlots = frame.plots.filter((p) => p.tier === "spine");
-  if (spinePlots.length !== 1)
-    throw new Error(`Genesis frame: expected exactly one spine plot, got ${spinePlots.length}`);
-
-  // ── Stage 2 ─────────────────────────────────────────────────────────
+  // ── Stage 2: secondaries ──────────────────────────────────────────────────
   let secondaries: GenesisSecondaries = { characters: [], relationships: [] };
+  let ctx: FrameContext = frameContext(frame);
   if (!opts.framedOnly) {
-    console.error(`  [2/${totalStages}] generating secondary characters…`);
+    log(`  [2/${totalStages}] generating secondary characters…`);
     const t1 = Date.now();
-    secondaries = await runSecondaries(opts.premise, frame);
-    console.error(`        secondaries complete in ${((Date.now() - t1) / 1000).toFixed(1)}s — ${secondaries.characters.length} characters`);
-    for (const c of secondaries.characters) {
-      if (c.weight !== "secondary")
-        throw new Error(`Genesis secondaries: ${c.id} must be secondary, got ${c.weight}`);
-      if (!locIds.has(c.where))
-        throw new Error(`Genesis secondaries: ${c.id} placed at unknown location ${c.where}`);
-      if (c.factionId && !factionIds.has(c.factionId))
-        throw new Error(`Genesis secondaries: ${c.id} affiliated with unknown faction ${c.factionId}`);
-      if (charIds.has(c.id))
-        throw new Error(`Genesis secondaries: duplicate character id ${c.id}`);
-      charIds.add(c.id);
-    }
-    for (const r of secondaries.relationships) {
-      if (!charIds.has(r.fromId) || !charIds.has(r.toId))
-        throw new Error(`Genesis secondaries: relationship references unknown character`);
-    }
+    secondaries = await runStage({
+      cache,
+      stageName: "secondaries",
+      schema: genesisSecondariesSchema,
+      label: "Genesis secondaries",
+      buildPrompt: () => secondariesPrompt(opts, frame),
+      extraIssues: (s) => stageCharacterIssues(s, ctx, "secondary"),
+      log,
+    });
+    for (const c of secondaries.characters) ctx.charIds.add(c.id);
+    log(
+      `        secondaries complete in ${((Date.now() - t1) / 1000).toFixed(1)}s — ` +
+        `${secondaries.characters.length} characters`,
+    );
   }
 
-  // ── Stage 3 ─────────────────────────────────────────────────────────
+  // ── Stage 3: atmospherics ─────────────────────────────────────────────────
   let atmospherics: GenesisAtmospherics = { characters: [], relationships: [] };
   if (!opts.framedOnly) {
-    console.error(`  [3/${totalStages}] generating atmospheric NPCs…`);
+    log(`  [3/${totalStages}] generating atmospheric NPCs…`);
     const t2 = Date.now();
-    atmospherics = await runAtmospherics(opts.premise, frame, secondaries);
-    console.error(`        atmospherics complete in ${((Date.now() - t2) / 1000).toFixed(1)}s — ${atmospherics.characters.length} characters`);
-    for (const c of atmospherics.characters) {
-      if (c.weight !== "atmospheric")
-        throw new Error(`Genesis atmospherics: ${c.id} must be atmospheric, got ${c.weight}`);
-      if (!locIds.has(c.where))
-        throw new Error(`Genesis atmospherics: ${c.id} placed at unknown location ${c.where}`);
-      if (c.factionId && !factionIds.has(c.factionId))
-        throw new Error(`Genesis atmospherics: ${c.id} unknown faction ${c.factionId}`);
-      if (charIds.has(c.id))
-        throw new Error(`Genesis atmospherics: duplicate character id ${c.id}`);
-      charIds.add(c.id);
-    }
-    for (const r of atmospherics.relationships) {
-      if (!charIds.has(r.fromId) || !charIds.has(r.toId))
-        throw new Error(`Genesis atmospherics: relationship references unknown character`);
-    }
+    atmospherics = await runStage({
+      cache,
+      stageName: "atmospherics",
+      schema: genesisAtmosphericsSchema,
+      label: "Genesis atmospherics",
+      buildPrompt: () => atmosphericsPrompt(opts, frame, secondaries),
+      extraIssues: (a) => stageCharacterIssues(a, ctx, "atmospheric"),
+      log,
+    });
+    for (const c of atmospherics.characters) ctx.charIds.add(c.id);
+    log(
+      `        atmospherics complete in ${((Date.now() - t2) / 1000).toFixed(1)}s — ` +
+        `${atmospherics.characters.length} characters`,
+    );
   }
 
-  // ── Commit ──────────────────────────────────────────────────────────
+  // ── Drop stale relationships across all stages ────────────────────────────
+  // Relationship references are noise the model frequently invents. We don't
+  // re-prompt for them — that wastes 30-60s for a non-load-bearing field.
+  const allCharIds = new Set([
+    ...frame.characters.map((c) => c.id),
+    ...secondaries.characters.map((c) => c.id),
+    ...atmospherics.characters.map((c) => c.id),
+  ]);
+  const frameRels = dropStaleRelationships(frame.relationships, allCharIds);
+  const secRels = dropStaleRelationships(secondaries.relationships, allCharIds);
+  const atmRels = dropStaleRelationships(atmospherics.relationships, allCharIds);
+  const totalDropped = frameRels.dropped + secRels.dropped + atmRels.dropped;
+  if (totalDropped > 0) {
+    log(`        dropped ${totalDropped} relationship${totalDropped === 1 ? "" : "s"} with unknown character ids`);
+  }
+  const allRelationships = [...frameRels.kept, ...secRels.kept, ...atmRels.kept];
+
+  // ── Commit ────────────────────────────────────────────────────────────────
   const id = randomUUID();
   const now = new Date().toISOString();
   const world: World = {
@@ -245,11 +330,6 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
     ...frame.characters,
     ...secondaries.characters,
     ...atmospherics.characters,
-  ];
-  const allRelationships = [
-    ...frame.relationships,
-    ...secondaries.relationships,
-    ...atmospherics.relationships,
   ];
 
   db.raw.transaction(() => {
@@ -296,6 +376,20 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
       });
     }
   })();
+
+  // Success — clear the cache. Failure leaves it in place so a retry resumes.
+  cache.clear();
+
+  // Fire-and-forget image generation. Principal/secondary portraits and
+  // location plates are one-shot per world and cached forever. Atmospherics
+  // skip — there are too many; the director can request portraits for the
+  // ones it actually pulls into focus mid-chronicle.
+  const imageEligible = [
+    ...frame.characters,
+    ...secondaries.characters,
+  ];
+  for (const c of imageEligible) imageForCharacter(db, world, c.id);
+  for (const l of frame.locations) imageForLocation(db, world, l.id);
 
   return world;
 }

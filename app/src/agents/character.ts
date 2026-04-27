@@ -5,7 +5,7 @@
 // the prophecy's surface text (never the hidden meaning) so they can
 // propose `prophecy_echoed` without speaking the prophecy aloud.
 
-import { callCharacter, extractJson } from "../llm/client.js";
+import { callCharacter } from "../llm/client.js";
 import { loadPrompt } from "../prompts/loader.js";
 import {
   characterActionSchema,
@@ -13,6 +13,7 @@ import {
 } from "../world/schemas.js";
 import type { Db } from "../db/index.js";
 import type { CharacterId, DirectorPlan, WorldId } from "../world/types.js";
+import { runAgent } from "./_runAgent.js";
 
 export async function characterAct(
   db: Db,
@@ -81,11 +82,12 @@ export async function characterAct(
     })),
   };
 
-  const raw = await callCharacter({
+  return runAgent({
+    label: `character ${me.id}`,
+    call: callCharacter,
     system: loadPrompt("character"),
     user: `You are ${me.name} (${me.epithet}). The scene is:\n\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\`\n\nReturn one fenced JSON block with thought, saysOrDoes, and proposedChanges.`,
-    maxTokens: 800,
+    schema: characterActionSchema,
+    maxTokens: 4000,
   });
-
-  return characterActionSchema.parse(extractJson(raw));
 }

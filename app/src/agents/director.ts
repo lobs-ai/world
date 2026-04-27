@@ -4,11 +4,13 @@
 // Receives prophecy hidden meanings — the director is the only agent that
 // does. Never serialise hidden meanings to non-director outputs.
 
-import { callDirector, extractJson } from "../llm/client.js";
+import { callDirector } from "../llm/client.js";
 import { loadPrompt } from "../prompts/loader.js";
 import { directorPlanSchema, type DirectorPlanParsed } from "../world/schemas.js";
 import type { Db } from "../db/index.js";
 import type { WorldId } from "../world/types.js";
+import { runAgent } from "./_runAgent.js";
+import type { RepairIssue } from "../llm/repair.js";
 
 export async function director(db: Db, worldId: WorldId): Promise<DirectorPlanParsed> {
   const world = db.getWorld(worldId);
@@ -82,8 +84,6 @@ export async function director(db: Db, worldId: WorldId): Promise<DirectorPlanPa
       principal: principal.map((c) => ({
         id: c.id, name: c.name, epithet: c.epithet,
         where: c.where, mood: c.mood.dominant, factionId: c.factionId,
-        // Top desire surfaces so the director can steer scenes toward
-        // what each character actually wants right now.
         topDesire: c.desires[0]?.goal,
         alive: c.alive,
       })),
@@ -96,9 +96,6 @@ export async function director(db: Db, worldId: WorldId): Promise<DirectorPlanPa
       atmospheric: atmospheric.map((c) => ({
         id: c.id, name: c.name, epithet: c.epithet,
         where: c.where, factionId: c.factionId,
-        // Atmospheric characters get their top desire surfaced too —
-        // they are real people. The director needs this to know when an
-        // atmospheric should be focal.
         topDesire: c.desires[0]?.goal,
         alive: c.alive,
       })),
@@ -116,78 +113,108 @@ export async function director(db: Db, worldId: WorldId): Promise<DirectorPlanPa
     })),
   };
 
-  const raw = await callDirector({
+  const plotIds = new Set(plots.map((p) => p.id));
+  const locIds = new Set(locations.map((l) => l.id));
+  const factionIds = new Set(factions.map((f) => f.id));
+  const prophecyIds = new Set(prophecies.map((p) => p.id));
+  const charIds = new Set(characters.map((c) => c.id));
+
+  return runAgent({
+    label: "director",
+    call: callDirector,
     system: loadPrompt("director"),
     user: `Current world state (tick ${world.tick}):\n\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\`\n\nReturn the plan for the next chronicle entry as a single fenced JSON block.`,
-    maxTokens: 1500,
+    schema: directorPlanSchema,
+    maxTokens: 4000,
+    validate: (plan) => validateDirectorPlan(plan, { plotIds, locIds, factionIds, prophecyIds, charIds }),
   });
+}
 
-  const plan = directorPlanSchema.parse(extractJson(raw));
+interface KnownIds {
+  plotIds: Set<string>;
+  locIds: Set<string>;
+  factionIds: Set<string>;
+  prophecyIds: Set<string>;
+  charIds: Set<string>;
+}
+
+function validateDirectorPlan(
+  plan: DirectorPlanParsed,
+  ids: KnownIds,
+): RepairIssue[] {
+  const issues: RepairIssue[] = [];
 
   // Beat-shape validation: world_report may omit plot/location/cast.
   // Everything else must have plot, location, and ≥1 character.
   if (plan.beatType === "world_report") {
-    // optional ids must still resolve if given
-    if (plan.plotId && !plots.find((p) => p.id === plan.plotId))
-      throw new Error(`Director chose unknown plot ${plan.plotId}`);
-    if (plan.locationId && !locations.find((l) => l.id === plan.locationId))
-      throw new Error(`Director chose unknown location ${plan.locationId}`);
+    if (plan.plotId && !ids.plotIds.has(plan.plotId)) {
+      issues.push({ path: "plotId", message: `unknown plot id "${plan.plotId}" (or omit for world_report)` });
+    }
+    if (plan.locationId && !ids.locIds.has(plan.locationId)) {
+      issues.push({ path: "locationId", message: `unknown location id "${plan.locationId}" (or omit for world_report)` });
+    }
   } else {
-    if (!plan.plotId)
-      throw new Error(`Director: ${plan.beatType} beat requires plotId`);
-    if (!plots.find((p) => p.id === plan.plotId))
-      throw new Error(`Director chose unknown plot ${plan.plotId}`);
-    if (!plan.locationId)
-      throw new Error(`Director: ${plan.beatType} beat requires locationId`);
-    if (!locations.find((l) => l.id === plan.locationId))
-      throw new Error(`Director chose unknown location ${plan.locationId}`);
-    if (plan.characterIds.length < 1)
-      throw new Error(`Director: ${plan.beatType} beat requires at least one focal character`);
+    if (!plan.plotId) {
+      issues.push({ path: "plotId", message: `${plan.beatType} beat requires plotId` });
+    } else if (!ids.plotIds.has(plan.plotId)) {
+      issues.push({ path: "plotId", message: `unknown plot id "${plan.plotId}"` });
+    }
+    if (!plan.locationId) {
+      issues.push({ path: "locationId", message: `${plan.beatType} beat requires locationId` });
+    } else if (!ids.locIds.has(plan.locationId)) {
+      issues.push({ path: "locationId", message: `unknown location id "${plan.locationId}"` });
+    }
+    if (plan.characterIds.length < 1) {
+      issues.push({ path: "characterIds", message: `${plan.beatType} beat requires at least one focal character` });
+    }
   }
-  if (plan.factionId && !factions.find((f) => f.id === plan.factionId))
-    throw new Error(`Director chose unknown faction ${plan.factionId}`);
-  if (plan.prophecyId && !prophecies.find((p) => p.id === plan.prophecyId))
-    throw new Error(`Director chose unknown prophecy ${plan.prophecyId}`);
+  if (plan.factionId && !ids.factionIds.has(plan.factionId)) {
+    issues.push({ path: "factionId", message: `unknown faction id "${plan.factionId}" (or omit)` });
+  }
+  if (plan.prophecyId && !ids.prophecyIds.has(plan.prophecyId)) {
+    issues.push({ path: "prophecyId", message: `unknown prophecy id "${plan.prophecyId}" (or omit)` });
+  }
 
   // Spawn validation. Spawned ids must be fresh; spawned plots/characters
-  // must reference existing locations/factions/characters. The tick loop
-  // applies these before character agents run, so a spawned character may
-  // appear in characterIds.
-  const knownCharIds = new Set(characters.map((c) => c.id));
-  const knownLocIds = new Set(locations.map((l) => l.id));
-  const knownFactionIds = new Set(factions.map((f) => f.id));
-  const knownPlotIds = new Set(plots.map((p) => p.id));
-
+  // must reference existing locations/factions/characters.
+  const knownChar = new Set(ids.charIds);
   if (plan.spawnCharacter) {
     const sc = plan.spawnCharacter;
-    if (knownCharIds.has(sc.id))
-      throw new Error(`Director spawnCharacter: id ${sc.id} already exists`);
-    if (!knownLocIds.has(sc.where))
-      throw new Error(`Director spawnCharacter: unknown location ${sc.where}`);
-    if (sc.factionId && !knownFactionIds.has(sc.factionId))
-      throw new Error(`Director spawnCharacter: unknown faction ${sc.factionId}`);
-    knownCharIds.add(sc.id);
+    if (knownChar.has(sc.id)) {
+      issues.push({ path: "spawnCharacter.id", message: `id "${sc.id}" already exists — pick a fresh id` });
+    }
+    if (!ids.locIds.has(sc.where)) {
+      issues.push({ path: "spawnCharacter.where", message: `unknown location id "${sc.where}"` });
+    }
+    if (sc.factionId && !ids.factionIds.has(sc.factionId)) {
+      issues.push({ path: "spawnCharacter.factionId", message: `unknown faction id "${sc.factionId}" (or omit)` });
+    }
+    knownChar.add(sc.id);
   }
   if (plan.spawnPlot) {
     const sp = plan.spawnPlot;
-    if (knownPlotIds.has(sp.id))
-      throw new Error(`Director spawnPlot: id ${sp.id} already exists`);
+    if (ids.plotIds.has(sp.id)) {
+      issues.push({ path: "spawnPlot.id", message: `id "${sp.id}" already exists — pick a fresh id` });
+    }
     for (const cid of sp.central) {
-      if (!knownCharIds.has(cid))
-        throw new Error(`Director spawnPlot: unknown character ${cid}`);
+      if (!knownChar.has(cid)) {
+        issues.push({ path: "spawnPlot.central", message: `unknown character id "${cid}"` });
+      }
     }
     for (const fid of sp.factionIds) {
-      if (!knownFactionIds.has(fid))
-        throw new Error(`Director spawnPlot: unknown faction ${fid}`);
+      if (!ids.factionIds.has(fid)) {
+        issues.push({ path: "spawnPlot.factionIds", message: `unknown faction id "${fid}"` });
+      }
     }
   }
 
   // After spawn registration, characterIds (the focal cast) may reference
   // the freshly spawned character.
   for (const cid of plan.characterIds) {
-    if (!knownCharIds.has(cid))
-      throw new Error(`Director chose unknown character ${cid}`);
+    if (!knownChar.has(cid)) {
+      issues.push({ path: "characterIds", message: `unknown character id "${cid}"` });
+    }
   }
 
-  return plan;
+  return issues;
 }

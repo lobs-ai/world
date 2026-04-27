@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS locations (
   type        TEXT NOT NULL,
   description TEXT NOT NULL,
   weather     TEXT NOT NULL,
+  image_path  TEXT,
   PRIMARY KEY (world_id, id),
   FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
 );
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS characters (
   traits      TEXT NOT NULL,                -- JSON object
   alive       INTEGER NOT NULL DEFAULT 1,
   secrets     TEXT NOT NULL DEFAULT '[]',    -- JSON array of strings
+  image_path  TEXT,
   PRIMARY KEY (world_id, id),
   FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
 );
@@ -155,6 +157,7 @@ CREATE TABLE IF NOT EXISTS chronicle_entries (
   location_ids    TEXT NOT NULL,          -- JSON array
   character_ids   TEXT NOT NULL,          -- JSON array
   paragraphs      TEXT NOT NULL,          -- JSON array
+  image_path      TEXT,
   created_at      TEXT NOT NULL,
   FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE
 );

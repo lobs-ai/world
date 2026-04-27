@@ -21,6 +21,7 @@ import type {
   PlotBeat,
   WorldId,
 } from "./world/types.js";
+import { imageForCharacter, imageForScene } from "./images/index.js";
 
 export interface TickResult {
   ok: boolean;
@@ -71,6 +72,8 @@ export async function runTick(db: Db, worldId: WorldId): Promise<TickResult> {
       secrets: sc.secrets,
     });
     notes.push(`spawned character ${sc.id}`);
+    // Generate a portrait for the new figure — fire-and-forget.
+    if (startWorld) imageForCharacter(db, startWorld, sc.id);
   }
   if (plan.spawnPlot) {
     const sp = plan.spawnPlot;
@@ -254,6 +257,26 @@ export async function runTick(db: Db, worldId: WorldId): Promise<TickResult> {
     db.bumpWorldTick(worldId, rendered.inWorldDate);
     db.decayMemories(worldId, 0.985);
   })();
+
+  // Fire-and-forget hero image for scene beats. Cooldown gate (≥1 hour
+  // since the last imaged entry) lives inside `imageForScene`.
+  if (!isWorldReport) {
+    const writtenEntry = db.listEntries(worldId, 1)[0];
+    if (writtenEntry && writtenEntry.id === entryId) {
+      const sceneCharacters = writtenEntry.characterIds
+        .map((cid) => db.getCharacter(worldId, cid))
+        .filter((c): c is NonNullable<typeof c> => c !== null);
+      const sceneLocation = plan.locationId
+        ? db.getLocation(worldId, plan.locationId)
+        : null;
+      imageForScene(db, startWorld, {
+        entry: writtenEntry,
+        sketch: plan.sketch,
+        characters: sceneCharacters,
+        location: sceneLocation,
+      });
+    }
+  }
 
   const summary =
     `beat=${plan.beatType} applied=${appliedCount} rejected=${rejectedCount} cast=${actions.length}` +

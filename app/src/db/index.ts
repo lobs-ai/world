@@ -33,11 +33,13 @@ export interface Db {
   insertLocation(l: Location): void;
   listLocations(worldId: WorldId): Location[];
   getLocation(worldId: WorldId, id: string): Location | null;
+  setLocationImage(worldId: WorldId, id: string, path: string): void;
 
   insertCharacter(c: Character): void;
   updateCharacter(c: Character): void;
   listCharacters(worldId: WorldId): Character[];
   getCharacter(worldId: WorldId, id: string): Character | null;
+  setCharacterImage(worldId: WorldId, id: string, path: string): void;
 
   upsertRelationship(r: Relationship): void;
   listRelationshipsFrom(worldId: WorldId, fromId: string): Relationship[];
@@ -68,6 +70,7 @@ export interface Db {
 
   insertEntry(e: ChronicleEntry): void;
   listEntries(worldId: WorldId, limit?: number): ChronicleEntry[];
+  setEntryImage(worldId: WorldId, id: string, path: string): void;
 
   logTick(
     worldId: WorldId,
@@ -106,6 +109,9 @@ function migrate(raw: Database.Database): void {
   ensureColumn(raw, "chronicle_entries", "beat_type", "beat_type TEXT NOT NULL DEFAULT 'rising'");
   ensureColumn(raw, "chronicle_entries", "faction_ids", "faction_ids TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(raw, "chronicle_entries", "prophecy_ids", "prophecy_ids TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(raw, "characters", "image_path", "image_path TEXT");
+  ensureColumn(raw, "locations", "image_path", "image_path TEXT");
+  ensureColumn(raw, "chronicle_entries", "image_path", "image_path TEXT");
 
   // Indexes on migrated columns must be created after ensureColumn — for an
   // older DB the column doesn't exist yet when schema.sql runs.
@@ -157,8 +163,8 @@ export function openDb(path: string): Db {
 
   // ── locations ──────────────────────────────────────────────────────────
   const stmtInsertLocation = raw.prepare(`
-    INSERT INTO locations (id, world_id, name, type, description, weather)
-    VALUES (@id, @worldId, @name, @type, @description, @weather)
+    INSERT INTO locations (id, world_id, name, type, description, weather, image_path)
+    VALUES (@id, @worldId, @name, @type, @description, @weather, @imagePath)
   `);
   const stmtListLocations = raw.prepare(
     `SELECT * FROM locations WHERE world_id = ? ORDER BY name`,
@@ -166,18 +172,22 @@ export function openDb(path: string): Db {
   const stmtGetLocation = raw.prepare(
     `SELECT * FROM locations WHERE world_id = ? AND id = ?`,
   );
+  const stmtSetLocImage = raw.prepare(
+    `UPDATE locations SET image_path = ? WHERE world_id = ? AND id = ?`,
+  );
 
   // ── characters ─────────────────────────────────────────────────────────
   const stmtInsertCharacter = raw.prepare(`
-    INSERT INTO characters (id, world_id, name, epithet, age, where_id, weight, faction_id, portrait, summary, mood, desires, traits, alive, secrets)
-    VALUES (@id, @worldId, @name, @epithet, @age, @whereId, @weight, @factionId, @portrait, @summary, @mood, @desires, @traits, @alive, @secrets)
+    INSERT INTO characters (id, world_id, name, epithet, age, where_id, weight, faction_id, portrait, summary, mood, desires, traits, alive, secrets, image_path)
+    VALUES (@id, @worldId, @name, @epithet, @age, @whereId, @weight, @factionId, @portrait, @summary, @mood, @desires, @traits, @alive, @secrets, @imagePath)
   `);
   const stmtUpdateCharacter = raw.prepare(`
     UPDATE characters SET
       name=@name, epithet=@epithet, age=@age, where_id=@whereId,
       weight=@weight, faction_id=@factionId,
       portrait=@portrait, summary=@summary, mood=@mood, desires=@desires,
-      traits=@traits, alive=@alive, secrets=@secrets
+      traits=@traits, alive=@alive, secrets=@secrets,
+      image_path=@imagePath
     WHERE world_id=@worldId AND id=@id
   `);
   const stmtListCharacters = raw.prepare(
@@ -187,6 +197,9 @@ export function openDb(path: string): Db {
   );
   const stmtGetCharacter = raw.prepare(
     `SELECT * FROM characters WHERE world_id = ? AND id = ?`,
+  );
+  const stmtSetCharImage = raw.prepare(
+    `UPDATE characters SET image_path = ? WHERE world_id = ? AND id = ?`,
   );
 
   // ── relationships ──────────────────────────────────────────────────────
@@ -294,11 +307,14 @@ export function openDb(path: string): Db {
 
   // ── chronicle ──────────────────────────────────────────────────────────
   const stmtInsertEntry = raw.prepare(`
-    INSERT INTO chronicle_entries (id, world_id, tick, in_world_date, time_of_day, weather, title, beat_type, plot_ids, faction_ids, prophecy_ids, location_ids, character_ids, paragraphs, created_at)
-    VALUES (@id, @worldId, @tick, @inWorldDate, @timeOfDay, @weather, @title, @beatType, @plotIds, @factionIds, @prophecyIds, @locationIds, @characterIds, @paragraphs, @createdAt)
+    INSERT INTO chronicle_entries (id, world_id, tick, in_world_date, time_of_day, weather, title, beat_type, plot_ids, faction_ids, prophecy_ids, location_ids, character_ids, paragraphs, image_path, created_at)
+    VALUES (@id, @worldId, @tick, @inWorldDate, @timeOfDay, @weather, @title, @beatType, @plotIds, @factionIds, @prophecyIds, @locationIds, @characterIds, @paragraphs, @imagePath, @createdAt)
   `);
   const stmtListEntries = raw.prepare(
     `SELECT * FROM chronicle_entries WHERE world_id = ? ORDER BY tick DESC LIMIT ?`,
+  );
+  const stmtSetEntryImage = raw.prepare(
+    `UPDATE chronicle_entries SET image_path = ? WHERE world_id = ? AND id = ?`,
   );
 
   const stmtLogTick = raw.prepare(`
@@ -324,10 +340,12 @@ export function openDb(path: string): Db {
   type LocRow = {
     id: string; world_id: string; name: string; type: Location["type"];
     description: string; weather: string;
+    image_path: string | null;
   };
   const mapLocation = (r: LocRow): Location => ({
     id: r.id, worldId: r.world_id, name: r.name, type: r.type,
     description: r.description, weather: r.weather,
+    imagePath: r.image_path ?? undefined,
   });
 
   type CharRow = {
@@ -337,6 +355,7 @@ export function openDb(path: string): Db {
     portrait: string; summary: string;
     mood: string; desires: string; traits: string; alive: number;
     secrets: string;
+    image_path: string | null;
   };
   const mapCharacter = (r: CharRow): Character => ({
     id: r.id, worldId: r.world_id, name: r.name, epithet: r.epithet,
@@ -346,6 +365,7 @@ export function openDb(path: string): Db {
     mood: p(r.mood), desires: p(r.desires), traits: p(r.traits),
     alive: r.alive === 1,
     secrets: pOr<string[]>(r.secrets, []),
+    imagePath: r.image_path ?? undefined,
   });
 
   type RelRow = {
@@ -432,7 +452,9 @@ export function openDb(path: string): Db {
     beat_type: ChronicleEntry["beatType"];
     plot_ids: string; faction_ids: string; prophecy_ids: string;
     location_ids: string; character_ids: string;
-    paragraphs: string; created_at: string;
+    paragraphs: string;
+    image_path: string | null;
+    created_at: string;
   };
   const mapEntry = (r: EntryRow): ChronicleEntry => ({
     id: r.id, worldId: r.world_id, tick: r.tick,
@@ -445,6 +467,7 @@ export function openDb(path: string): Db {
     locationIds: pOr<string[]>(r.location_ids, []),
     characterIds: pOr<string[]>(r.character_ids, []),
     paragraphs: pOr<ChronicleEntry["paragraphs"]>(r.paragraphs, []),
+    imagePath: r.image_path ?? undefined,
     createdAt: r.created_at,
   });
 
@@ -470,7 +493,7 @@ export function openDb(path: string): Db {
       return r.tick;
     },
     insertLocation(l) {
-      stmtInsertLocation.run(l);
+      stmtInsertLocation.run({ ...l, imagePath: l.imagePath ?? null });
     },
     listLocations(worldId) {
       return (stmtListLocations.all(worldId) as LocRow[]).map(mapLocation);
@@ -479,6 +502,9 @@ export function openDb(path: string): Db {
       const r = stmtGetLocation.get(worldId, id) as LocRow | undefined;
       return r ? mapLocation(r) : null;
     },
+    setLocationImage(worldId, id, path) {
+      stmtSetLocImage.run(path, worldId, id);
+    },
     insertCharacter(c) {
       stmtInsertCharacter.run({
         ...c,
@@ -486,6 +512,7 @@ export function openDb(path: string): Db {
         factionId: c.factionId ?? null,
         mood: j(c.mood), desires: j(c.desires), traits: j(c.traits),
         secrets: j(c.secrets ?? []),
+        imagePath: c.imagePath ?? null,
       });
     },
     updateCharacter(c) {
@@ -495,6 +522,7 @@ export function openDb(path: string): Db {
         factionId: c.factionId ?? null,
         mood: j(c.mood), desires: j(c.desires), traits: j(c.traits),
         secrets: j(c.secrets ?? []),
+        imagePath: c.imagePath ?? null,
       });
     },
     listCharacters(worldId) {
@@ -503,6 +531,9 @@ export function openDb(path: string): Db {
     getCharacter(worldId, id) {
       const r = stmtGetCharacter.get(worldId, id) as CharRow | undefined;
       return r ? mapCharacter(r) : null;
+    },
+    setCharacterImage(worldId, id, path) {
+      stmtSetCharImage.run(path, worldId, id);
     },
     upsertRelationship(r) {
       stmtUpsertRel.run(r);
@@ -614,10 +645,14 @@ export function openDb(path: string): Db {
         locationIds: j(e.locationIds),
         characterIds: j(e.characterIds),
         paragraphs: j(e.paragraphs),
+        imagePath: e.imagePath ?? null,
       });
     },
     listEntries(worldId, limit = 50) {
       return (stmtListEntries.all(worldId, limit) as EntryRow[]).map(mapEntry);
+    },
+    setEntryImage(worldId, id, path) {
+      stmtSetEntryImage.run(path, worldId, id);
     },
     logTick(worldId, tick, ok, durationMs, notes) {
       stmtLogTick.run(worldId, tick, ok ? 1 : 0, durationMs, notes, new Date().toISOString());

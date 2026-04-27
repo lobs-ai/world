@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { Fleuron, Portrait, SectionHead } from "@/components/Primitives";
 import { Nav } from "@/components/Nav";
+import { ChronicleImage } from "@/components/ChronicleImage";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,11 @@ export default function LocationPage({
       <Nav worldId={world.id} worldName={world.name} />
 
       <div className="page" style={{ position: "relative", zIndex: 1 }}>
+        {l.imagePath && (
+          <div style={{ marginBottom: 32, marginInline: "auto", maxWidth: 960 }}>
+            <ChronicleImage path={l.imagePath} alt={l.name} aspect="21 / 9" />
+          </div>
+        )}
         <div style={{ textAlign: "center" }}>
           <div className="display-sc" style={{ fontSize: 13, color: "var(--ink-faint)", letterSpacing: "0.32em", marginBottom: 12 }}>
             a {l.type} of the realm

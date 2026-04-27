@@ -46,7 +46,16 @@ Return one fenced JSON block:
       ]
     }
   ],
-  "relationships": []
+  "relationships": [
+    {
+      "fromId": "old_erra",
+      "toId": "margreth",
+      "typeFromMe": "long-distant subject",
+      "affection": 0.2,
+      "trust": 0.4,
+      "note": "She poured for the regent twice, in the year of the long thaw."
+    }
+  ]
 }
 ```
 
@@ -71,6 +80,13 @@ Return one fenced JSON block:
 edges that bind atmospherics to principals/secondaries (the steward who
 has been at the keep since the regent was a girl naturally has a
 relationship to her).
+
+**Use these exact relationship keys, no aliases**: `fromId`, `toId`,
+`typeFromMe` (string, e.g. "old subject", "rival's hand"), `affection`
+(−1..1), `trust` (−1..1), `note` (string). Not `from`, not `to`, not
+`type`, not `relation`. Both `fromId` and `toId` must be character ids
+that already exist in the frame, the secondaries you were given, or the
+atmospherics you are creating in this same response.
 
 ## What atmospheric depth looks like
 

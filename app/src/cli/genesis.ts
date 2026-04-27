@@ -4,15 +4,17 @@ import { openDb } from "../db/index.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  const fresh = args.includes("--fresh");
+  const positional = args.filter((a) => !a.startsWith("--"));
   const premiseFlagIdx = args.indexOf("--premise");
   let premise: string | null = null;
   if (premiseFlagIdx >= 0) {
     premise = args[premiseFlagIdx + 1] ?? null;
-  } else if (args.length === 1) {
-    premise = args[0] ?? null;
+  } else if (positional.length === 1) {
+    premise = positional[0] ?? null;
   }
   if (!premise) {
-    console.error('usage: genesis "<one-sentence premise>"');
+    console.error('usage: genesis "<one-sentence premise>" [--fresh]');
     process.exit(2);
   }
   if (!process.env.MINIMAX_API_KEY) {
@@ -21,8 +23,10 @@ async function main(): Promise<void> {
   }
   const cfg = getConfig();
   const db = openDb(cfg.dbPath);
-  console.error(`Genesis (premise: ${premise.length} chars). This may take a moment...`);
-  const world = await genesis(db, { premise });
+  console.error(
+    `Genesis (premise: ${premise.length} chars)${fresh ? ", --fresh" : ""}. This may take a moment...`,
+  );
+  const world = await genesis(db, { premise, fresh });
   console.log(JSON.stringify({ id: world.id, name: world.name, tick: world.tick }, null, 2));
 }
 

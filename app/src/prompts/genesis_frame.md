@@ -172,6 +172,27 @@ location has one detail that could only be true here: the highest tower
 has not had a candle lit in it in forty years; the lord's table is set for
 seven ghosts every night.
 
+The `type` field is a **short descriptive noun phrase**, not a fixed list.
+Use whatever fits the place: `"capital"`, `"town"`, `"village"`, `"ruin"`,
+`"wilderness"`, `"fortress"`, `"inn"`, `"abbey"`, `"crossroads"`, `"marsh-shrine"`,
+`"seat of a great house"`, `"hermitage"`. One or two words, lower-case,
+no punctuation. The UI renders it verbatim as `"a {type} of the realm"`.
+
+### Field rules — read once, then obey
+
+- **No nulls.** If a field is unknown or not applicable, omit the key
+  entirely. Never write `"factionId": null` or `"hiddenMeaning": null` —
+  just leave the key out.
+- **Numbers are numbers.** Tensions, valences, intensities, payoff ticks
+  are real numbers in their stated range. Never `null`, never strings
+  like `"high"` or `"~0.7"`.
+- **Strings stay short.** No field exceeds the length the example shows;
+  most are far shorter. Names ≤ 80 chars; epithets ≤ 120; one-line
+  summaries ≤ 240. If you cannot say it short, say less.
+- **Ids are stable.** Lower-case `[a-z][a-z0-9_-]{1,40}`. The same id
+  must be referenced everywhere it appears (`where`, `factionId`,
+  `central`, etc.). Do not invent ids in references that do not exist.
+
 ### Factions (2–6)
 
 Factions are groups with their own momentum: the council of houses, the

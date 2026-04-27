@@ -52,6 +52,22 @@ async function callRaw(modelString: string, call: LlmCall): Promise<string> {
 
 const FENCE = /```(?:json)?\s*([\s\S]*?)\s*```/;
 
+// Recursively strip `null` values from objects so Zod's `.default()` and
+// `.optional()` can apply uniformly. LLMs frequently emit `"field": null` to
+// mean "no value" — without this they'd fail an otherwise-valid schema.
+function stripNulls(v: unknown): unknown {
+    if (Array.isArray(v)) return v.map(stripNulls);
+    if (v && typeof v === "object") {
+        const out: Record<string, unknown> = {};
+        for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+            if (val === null) continue;
+            out[k] = stripNulls(val);
+        }
+        return out;
+    }
+    return v;
+}
+
 export function extractJson(raw: string): unknown {
     // Accept either a fenced block or a bare JSON object/array.
     const trimmed = raw.trim();
@@ -79,7 +95,7 @@ export function extractJson(raw: string): unknown {
         candidate = trimmed.slice(start, end + 1);
     }
     try {
-        return JSON.parse(candidate);
+        return stripNulls(JSON.parse(candidate));
     } catch (err) {
         throw new Error(
             `Failed to parse JSON from model output: ${(err as Error).message}\n--- raw ---\n${raw}`,
