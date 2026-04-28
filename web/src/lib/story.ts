@@ -5,7 +5,7 @@
 // back to the first principal we find.
 
 import "server-only";
-import type { Character, Plot, World } from "@world/app";
+import type { Character, ChronicleEntry, Plot, PlotBeat, World } from "@world/app";
 import { db } from "./db";
 
 export interface MainStory {
@@ -48,6 +48,72 @@ export function storySoFar(world: World): {
     latestBeatTitle: last?.title ?? null,
     latestBeatSketch: last?.sketch ?? null,
   };
+}
+
+// The "current chapter" is the latest spine beat. Entries belonging to it
+// are those written after the spine last advanced (i.e. tick >
+// spine.lastAdvancedTick). When the spine has no beats yet, we treat all
+// entries as the opening chapter.
+export interface CurrentChapter {
+  number: number;          // 1-based chapter number
+  total: number;           // total beats so far
+  beat: PlotBeat | null;   // the active beat, when one exists
+  thisChapter: ChronicleEntry[];   // entries since the spine last advanced
+  earlier: ChronicleEntry[];       // everything older
+}
+
+export function currentChapter(world: World, limit = 30): CurrentChapter {
+  const story = mainStory(world);
+  const entries = db().listEntries(world.id, limit);
+  const spine = story.spine;
+
+  if (!spine || spine.beats.length === 0) {
+    return {
+      number: 1,
+      total: 1,
+      beat: null,
+      thisChapter: entries,
+      earlier: [],
+    };
+  }
+
+  const beat = spine.beats[spine.beats.length - 1] ?? null;
+  // First chapter is special: there is no "before" the spine started, so
+  // every entry up to the next advancement belongs to chapter 1.
+  const isFirstChapter = spine.beats.length === 1;
+  const cutoff = isFirstChapter ? -1 : spine.lastAdvancedTick;
+  const thisChapter = entries.filter((e) => e.tick > cutoff);
+  const earlier = entries.filter((e) => e.tick <= cutoff);
+
+  return {
+    number: spine.beats.length,
+    total: spine.beats.length,
+    beat,
+    thisChapter,
+    earlier,
+  };
+}
+
+// A compact view of the spine's progress for the chapter-strip in the
+// hero. Each beat becomes a marker with done/active state.
+export interface ChapterMarker {
+  index: number;       // 1-based
+  title: string;
+  type: string;
+  when: string;
+  active: boolean;     // current beat
+}
+
+export function chapterTimeline(world: World): ChapterMarker[] {
+  const story = mainStory(world);
+  const beats = story.spine?.beats ?? [];
+  return beats.map((b, i) => ({
+    index: i + 1,
+    title: b.title,
+    type: b.type,
+    when: b.when,
+    active: i === beats.length - 1,
+  }));
 }
 
 // First quote-bearing line of the most recent entry. Useful as a pull

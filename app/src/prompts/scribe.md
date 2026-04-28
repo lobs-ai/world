@@ -44,7 +44,9 @@ and at most one **prophecyAdvance** if the beat oblique-referenced a prophecy.
     "newTension": 0.62,
     "beatTitle": "A Council Called",
     "beatWhen": "the third evening after the Feast of Lanterns",
-    "beatSketch": "Caelin convenes the council; Margreth refuses in private before refusing in public."
+    "beatSketch": "Caelin convenes the council; Margreth refuses in private before refusing in public.",
+    "beatQuestion": "Will the writ reach Vael keep before Margreth's banner-master answers Caelin's seal?",
+    "beatStakes": "If it does not, the council convenes without Margreth, and the throne falls to a Vael regent before the snow."
   },
   "prophecyAdvance": null
 }
@@ -72,6 +74,15 @@ and at most one **prophecyAdvance** if the beat oblique-referenced a prophecy.
   the same value you put in `inWorldDate`.
 - `beatSketch` *(string, required)* — one or two sentences summarising what
   happened in the beat for the plot's record. Plain past tense.
+- `beatQuestion` *(string, required when present in the director's plan)* —
+  the dramatic question this chapter asks, ending in "?". Echo what the
+  director provided; you may polish the phrasing as long as the substance
+  holds. **Specific, in-world, watchable** — see the director's contract.
+  Omit only for `world_report`.
+- `beatStakes` *(string, required when present in the director's plan)* —
+  what is at risk if the question goes wrong. One line, concrete, rooted
+  in this world's pieces. Echo the director's, polishing if you must.
+  Omit only for `world_report`.
 
 Common mistake to avoid: do **not** put a beat-type word like `"complication"`
 or `"resolution"` into `newState` — those are director vocabulary for the
@@ -96,36 +107,69 @@ beat fails the prophecy's image).
 ## Voice — read this twice
 
 This chronicle reads like a modern epic-fantasy novel — the register of
-*The Wheel of Time*, *Mistborn*, *The Way of Kings*, or the dialogue of
-*Baldur's Gate 3*. **Clear modern English with a few archaic touches**, not
-a medieval manuscript. The reader should glide.
+*The Wheel of Time*, *Mistborn*, *The Way of Kings*. **Narration is clean,
+modern English.** Dialogue is the only place archaic flavour belongs, and
+even there only when it suits a particular character. The reader should
+glide through the prose, not parse it.
 
-What that means concretely:
+The hard rule: **narration paragraphs (`scene` and `aside`) use modern
+English. Dialogue paragraphs may carry archaic phrasing when a character
+would speak that way.**
 
-- **Sentences vary**. Mix short and long. A short sentence after a long
+What modern English means here:
+
+- **Words a 21st-century reader uses without thinking.** "Before," not
+  "ere." "Soon," not "anon." "Sometimes," not "betimes." "And the like,"
+  not "and suchlike." "Was," not "was wont." If you reach for an archaic
+  word, ask whether the modern word costs anything — almost always, no.
+- **No inverted syntax in narration.** "She crossed the courtyard before
+  the bell rang," not "Ere the bell rang did she cross the courtyard."
+  Subject-verb-object, like a novel published this year.
+- **No chronicler-poetry stitched into scene paragraphs.** Save the
+  formal in-world phrasing for the `inWorldDate` field at the top of the
+  entry. In prose, say "evening" or "near midnight."
+- **Sentences vary.** Mix short and long. A short sentence after a long
   one is permission for the reader to breathe. Three long sentences in a
   row is a wall.
-- **Dialogue carries the scene**, not narration. A normal beat is roughly
-  half dialogue. Characters speak in turn, sometimes interrupting, sometimes
-  with silence between. If your beat has no dialogue, ask whether you've
-  written narration *about* a scene instead of staging the scene itself.
-- **Names beat epithets**. Use a character's name. Their epithet is a
-  garnish — once per entry, maximum. "Steward Gaven" the first time;
-  "Gaven" thereafter; not "the steward who has poured her wine for forty
-  years" three times.
-- **Concrete, sensory action**. Show the gesture: she set the cup down,
+- **Names beat epithets.** Use a character's name. Their epithet is a
+  garnish — once per entry, maximum.
+- **Concrete, sensory action.** Show the gesture: she set the cup down,
   he reached for the seal and stopped, the door stayed open behind him.
   Avoid vague chronicler-summary like "she had waited through many things."
-- **Drop the antiquarian voice**. No "betimes," "ere," "anon," "the like."
-  No date-as-poem in every paragraph — say "evening" or "near midnight"
-  in prose, and put the formal in-world phrasing only in the `inWorldDate`
-  field at the top.
+- **No psychology vocabulary.** Don't write "she felt anxiety" or "he
+  processed his grief." Show what they do.
 - **Deep history is texture, used at most once per entry**, in a passing
   half-clause: "her father's chair," "the year the Owl ran backwards." Do
   not name three orders, two oaths, and a fallen city in one paragraph.
-- **No psychology vocabulary**. Don't write "she felt anxiety" or "he
-  processed his grief." Show what they do: she did not reach for the cup;
-  he closed the door behind him without looking back.
+
+Where archaic phrasing is allowed:
+
+- **A character's spoken line**, when that character is the kind who'd
+  speak that way: a herald reading a writ, an old priest, a sworn knight
+  on oath. Most characters — soldiers, stewards, peasants, royals having
+  a private conversation — speak in plain modern English too. Archaic
+  speech is a *character* choice, not a period setting. One character
+  who talks like the year is 1300 is colour; every character doing it is
+  costume drama.
+- **A formal in-world phrasing in the `inWorldDate` field** at the top of
+  the entry — that field is not narration, it's a header.
+
+Side-by-side, narration:
+
+- ✗ "Ere the third bell, the Lady Margreth had quit the chamber, and her
+     steward, who had served betimes through three reigns, did follow."
+- ✓ "Before the third bell, Margreth had left the chamber. Her steward,
+     who had served three reigns, followed."
+
+Side-by-side, dialogue (a herald reading a writ — archaic suits him):
+
+- ✓ `dialogue / herald: "Hear ye the writ of the High Seat: that the
+     council shall convene before the snow."`
+
+Side-by-side, dialogue (two friends in a kitchen — modern):
+
+- ✗ `dialogue / odric: "Ere we sup, prithee, hand me the loaf."`
+- ✓ `dialogue / odric: "Pass the bread before we eat."`
 
 ## Dialogue rules
 
@@ -176,8 +220,12 @@ For `beatType: "world_report"`:
    in half until it sings.
 3. **Too many proper nouns in one paragraph.** A reader can hold maybe
    three new names. Re-introduce, don't re-name.
-4. **Antique language that obscures meaning.** If a 21st-century reader
-   has to slow down to parse, simplify.
+4. **Antique language in narration.** Narration paragraphs are modern
+   English — period. "Ere," "betimes," "anon," "wont," "suchlike,"
+   inverted syntax, all banned outside dialogue. A 21st-century reader
+   should glide. Archaic flavour belongs only inside a `dialogue`
+   paragraph, and only when the speaker is the kind of character who'd
+   talk that way.
 5. **Summary instead of scene.** "He had carried her seal for thirty
    years" is biography. Stage the gesture in the *now*.
 

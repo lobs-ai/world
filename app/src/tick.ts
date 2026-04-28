@@ -176,6 +176,11 @@ export async function runTick(db: Db, worldId: WorldId): Promise<TickResult> {
           title: pa.beatTitle,
           when: pa.beatWhen,
           sketch: pa.beatSketch,
+          // Chapter identity. Prefer scribe-finalized phrasing; fall back
+          // to whatever the director proposed in the plan so we never
+          // lose them on the way through.
+          question: pa.beatQuestion ?? plan.beatQuestion,
+          stakes: pa.beatStakes ?? plan.beatStakes,
         };
         plot.beats = [...plot.beats, beat];
         plot.state = pa.newState;

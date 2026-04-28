@@ -53,6 +53,8 @@ You are given:
   "beatType": "setup | complication | rising | climax | falling | resolution | world_report | private",
   "beatTitle": "A Council Called",
   "sketch": "Caelin sends to all the houses for a council to be held within the month. Margreth refuses, in private, before she refuses in public.",
+  "beatQuestion": "Will the writ reach Vael keep before Margreth's banner-master answers Caelin's seal?",
+  "beatStakes": "If it does not, the council convenes without Margreth, and the throne falls to a Vael regent before the snow.",
   "pacingNote": "decisive | rising | quiet | foreshadow | aftermath",
   "plotId": "succession",
   "locationId": "highkeep",
@@ -92,6 +94,44 @@ You are given:
 
 `spawnPlot` and `spawnCharacter` are both **optional** and **rare** —
 see the swerve cadence below. Most ticks omit both.
+
+## The chapter's question and stakes — read this twice
+
+Every non-`world_report` beat **must** carry `beatQuestion` and `beatStakes`.
+These are what the reader actually feels — what makes a chapter a chapter
+instead of a series of events.
+
+- **`beatQuestion`** — the dramatic uncertainty, *right now*, in this
+  chronicle's specific terms. One line. Ends in "?". Names something
+  concrete the reader can watch resolve. The reader should be able to
+  read this line and know what to look for in the next entry.
+- **`beatStakes`** — what happens if the question goes wrong. One line.
+  Concrete, felt, and rooted in *this* world's pieces (a banner, a seal,
+  a name, a body of water, a faction). Not "the kingdom is in danger."
+
+The beat *type* is rhythm — it tells you whether to write loud or quiet.
+The beat *question* is the chapter's identity. Two `rising` beats in a
+row should still ask different questions.
+
+### Good vs bad
+
+Good (specific, in-world, watchable):
+- Q: "Will the writ reach Vael keep before Margreth's banner-master answers Caelin's seal?"
+  S: "If it does not, the council convenes without Margreth, and the throne falls to a Vael regent before the snow."
+- Q: "Does the marsh-witch's son know what is buried under the bell?"
+  S: "If he speaks, the regent learns of the rider before midwinter; if he does not, the bell is rung at low tide for a sixth night."
+- Q: "Will Steward Gaven open the cabinet she has not opened in eleven years?"
+  S: "What is in it answers a question Caelin asked his mother on the night she died."
+
+Bad (vague, generic, unwatchable — rewrite):
+- Q: "Will Caelin succeed?" → succeed at *what*? Specific, please.
+- Q: "Will good triumph over evil?" → name the specific people and the specific decision.
+- S: "The kingdom is in danger." → name the danger by its specific shape.
+
+When a chapter's question gets answered (yes or no), the next beat
+should ask a *new* question. That's how the chronicle moves.
+
+`beatQuestion` and `beatStakes` may be omitted **only** for `world_report`.
 
 `factionId`, `prophecyId`, and `arcRevision` are optional. Use them to
 thread factions and slow-burn prophecies through the beat. `arcRevision`

@@ -221,6 +221,15 @@ export interface PlotBeat {
   title: string;
   when: string;           // in-world phrasing
   sketch: string;         // one-line beat description
+  // The dramatic question this chapter asks (one line, ends in "?"). What
+  // is uncertain right now — the thing that, if it tips one way or the
+  // other, the reader feels something. Optional only for back-compat with
+  // beats written before the field existed; new beats always set it.
+  question?: string;
+  // What is at risk if the question goes wrong. Concrete and felt, not
+  // abstract — "the council will name a Vael regent before the snow" beats
+  // "the kingdom is in danger." Optional for back-compat.
+  stakes?: string;
 }
 
 // Plot tier. The director uses these in cadence rules:
@@ -458,6 +467,12 @@ export interface DirectorPlan {
   beatType: BeatType;
   beatTitle: string;
   sketch: string;
+  // The dramatic question this chapter asks (one line, ends in "?") and
+  // what's at risk if it goes wrong. Required by the prompt for every
+  // non-world_report beat; typed optional for back-compat with legacy
+  // plans on disk.
+  beatQuestion?: string;
+  beatStakes?: string;
   pacingNote: string;
   // For most beats: plot + scene + cast.
   plotId?: PlotId;             // omitted for world_report only

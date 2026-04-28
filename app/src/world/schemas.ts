@@ -341,6 +341,15 @@ export const directorPlanSchema = z.object({
   beatType: beatTypeSchema,
   beatTitle: softStr(400, { min: 1 }),
   sketch: softStr(2400, { min: 1 }),
+  // The dramatic question this beat (and the chapter it opens or continues)
+  // asks. One line, ends in "?". This is what the reader feels pulling
+  // them forward — *what is uncertain right now*. Optional for legacy
+  // tolerance; the prompt requires it for every non-world_report beat.
+  beatQuestion: softStr(600).optional(),
+  // What is at risk if the question goes wrong. Concrete, felt. Optional
+  // for legacy tolerance; the prompt requires it for every non-world_report
+  // beat.
+  beatStakes: softStr(800).optional(),
   pacingNote: softStr(400, { min: 1 }),
   // For most beats: required. For world_report: optional. We enforce in
   // director.ts after parse.
@@ -490,6 +499,12 @@ export const scribeOutputSchema = z.object({
       beatTitle: softStr(400, { min: 1 }),
       beatWhen: softStr(400, { min: 1 }),
       beatSketch: softStr(2400, { min: 1 }),
+      // The chapter's dramatic question and stakes, finalized after the
+      // scene is rendered. The director proposes them in the plan; the
+      // scribe may polish the phrasing as long as the substance holds.
+      // Optional for legacy tolerance.
+      beatQuestion: softStr(600).optional(),
+      beatStakes: softStr(800).optional(),
     })
     .nullable(),
   prophecyAdvance: z
