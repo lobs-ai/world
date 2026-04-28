@@ -9,6 +9,9 @@
 #   5. runs the tick loop in the background (every WORLD_TICK_INTERVAL_SECONDS)
 #   6. starts the Next.js dev server on :3000 and opens the browser
 #
+# The chronicle may be empty for the first tick interval — that's expected;
+# the background loop will populate it.
+#
 # Ctrl-C stops both the loop and the web server cleanly.
 
 set -euo pipefail
@@ -68,20 +71,7 @@ fi
 
 worldId="$(resolve_world_id "")"
 
-# ── 4. ensure at least one chronicle entry exists ──────────────────────────
-entries_count="$(node -e '
-  const { openDb, getConfig } = require("./app/dist/index.js");
-  const db = openDb(getConfig().dbPath);
-  console.log(db.listEntries(process.argv[1], 1).length);
-' "$worldId" 2>/dev/null || echo 0)"
-if [[ "$entries_count" == "0" ]]; then
-  step "running first tick (so the chronicle has something to show)"
-  npm run --silent --workspace=app tick -- "$worldId" || {
-    err "first tick failed; the web server will still start, but the chronicle will be empty"
-  }
-fi
-
-# ── 5. start tick loop in background ───────────────────────────────────────
+# ── 4. start tick loop in background ───────────────────────────────────────
 LOG_DIR="$ROOT/data/logs"
 mkdir -p "$LOG_DIR"
 TICK_LOG="$LOG_DIR/tick.log"
@@ -105,7 +95,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# ── 6. start the web server ────────────────────────────────────────────────
+# ── 5. start the web server ────────────────────────────────────────────────
 URL="http://localhost:3000/world/$worldId"
 echo
 ok "world id     $(color_dim "$worldId")"

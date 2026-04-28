@@ -37,6 +37,7 @@ import {
   dropStaleRelationships,
   frameContext,
   frameIssues,
+  normalizeSpineCount,
   stageCharacterIssues,
   type FrameContext,
 } from "./refs.js";
@@ -243,6 +244,10 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
     extraIssues: (f) => frameIssues(f),
     log,
   });
+  const retiered = normalizeSpineCount(frame.plots);
+  if (retiered > 0) {
+    log(`        normalized spine count — re-tiered ${retiered} plot${retiered === 1 ? "" : "s"}`);
+  }
   log(
     `        frame complete in ${((Date.now() - t0) / 1000).toFixed(1)}s — ` +
       `${frame.locations.length} loc, ${frame.factions.length} fac, ` +

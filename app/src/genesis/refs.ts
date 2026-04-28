@@ -130,15 +130,42 @@ export function frameIssues(frame: GenesisFrame): RepairIssue[] {
     }
   }
 
-  const spineCount = frame.plots.filter((p) => p.tier === "spine").length;
-  if (spineCount !== 1) {
-    issues.push({
-      path: "plots",
-      message: `expected exactly one plot with tier "spine", got ${spineCount}`,
-    });
-  }
+  // Spine count is normalized post-parse (`normalizeSpineCount`) — the model
+  // routinely tags 0 or 2+ spines and a re-prompt rarely fixes it. Demoting
+  // the extras (or promoting the highest-tension plot) is harmless and saves
+  // a 30-60s LLM round trip.
 
   return issues;
+}
+
+// Force exactly one spine plot. If the model returned 2+, keep the
+// highest-tension one and demote the rest to subplot. If it returned 0,
+// promote the highest-tension non-ambient plot. Returns the number of
+// re-tiered plots for logging.
+export function normalizeSpineCount(plots: GenesisFrame["plots"]): number {
+  const spines = plots.filter((p) => p.tier === "spine");
+  if (spines.length === 1) return 0;
+
+  if (spines.length > 1) {
+    const keep = spines.reduce((a, b) => (b.tension > a.tension ? b : a));
+    let changed = 0;
+    for (const p of spines) {
+      if (p !== keep) {
+        p.tier = "subplot";
+        changed++;
+      }
+    }
+    return changed;
+  }
+
+  // 0 spines — promote the highest-tension subplot, or the highest-tension
+  // plot of any tier if there are no subplots.
+  const candidates = plots.filter((p) => p.tier === "subplot");
+  const pool = candidates.length > 0 ? candidates : plots;
+  if (pool.length === 0) return 0;
+  const promote = pool.reduce((a, b) => (b.tension > a.tension ? b : a));
+  promote.tier = "spine";
+  return 1;
 }
 
 // Issues for a stage that adds characters to an existing context. We don't
