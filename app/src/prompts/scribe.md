@@ -38,15 +38,60 @@ and at most one **prophecyAdvance** if the beat oblique-referenced a prophecy.
     { "kind": "scene", "text": "..." },
     { "kind": "dialogue", "who": "caelin", "text": "..." }
   ],
-  "plotAdvance": { ... },
+  "plotAdvance": {
+    "plotId": "succession",
+    "newState": "rising",
+    "newTension": 0.62,
+    "beatTitle": "A Council Called",
+    "beatWhen": "the third evening after the Feast of Lanterns",
+    "beatSketch": "Caelin convenes the council; Margreth refuses in private before refusing in public."
+  },
   "prophecyAdvance": null
 }
 ```
 
-`plotAdvance` is `null` for quiet beats. **Prophecy status transitions**:
-`unfulfilled → echoing` (first oblique reference); `echoing → half_fulfilled`
-(one literal element shown true); `→ fulfilled` (only on climax/resolution
-beats); `→ broken` (only when a beat fails the prophecy's image).
+### `plotAdvance` — exact schema
+
+`null` for quiet beats. Otherwise an object with **all** of these fields:
+
+- `plotId` *(string, required)* — the id of the plot being advanced. Use the
+  `plot.id` from the input context. Do not invent ids.
+- `newState` *(enum, required)* — the plot's **lifecycle stage** *after* this
+  beat. Pick exactly one of:
+  `"seeded"`, `"setup"`, `"rising"`, `"climax"`, `"falling"`, `"resolved"`.
+  This is **not** the beat type and **not** a sentence. It is one of those six
+  words. Legal transitions: `seeded → setup → rising → climax → falling →
+  resolved`. You may stay in the same state. Do not skip backward.
+- `newTension` *(number, required)* — a number between `0` and `1` (inclusive)
+  representing the plot's narrative tension after this beat. Examples: `0.2`
+  for a quiet seeded plot, `0.55` for rising, `0.85` for the edge of climax,
+  `0.3` for the calm of resolved. **A number, not a string. No quotes.**
+- `beatTitle` *(string, required)* — short title for this beat (≤ a dozen
+  words). Usually echoes the chronicle entry's `title`.
+- `beatWhen` *(string, required)* — in-world timestamp for the beat. Usually
+  the same value you put in `inWorldDate`.
+- `beatSketch` *(string, required)* — one or two sentences summarising what
+  happened in the beat for the plot's record. Plain past tense.
+
+Common mistake to avoid: do **not** put a beat-type word like `"complication"`
+or `"resolution"` into `newState` — those are director vocabulary for the
+*beat*, not the plot's state. Map them: a `complication` beat usually keeps
+the plot in `rising`; a `resolution` beat moves it to `resolved`.
+
+### `prophecyAdvance` — exact schema
+
+`null` (the default) unless the beat oblique-referenced a prophecy. Otherwise:
+
+- `prophecyId` *(string, required)* — id from the input context's `prophecy`.
+- `newStatus` *(enum, required)* — exactly one of:
+  `"unfulfilled"`, `"echoing"`, `"half_fulfilled"`, `"fulfilled"`, `"broken"`.
+- `note` *(string, required)* — one sentence explaining how this beat moved
+  the prophecy's status.
+
+**Prophecy status transitions**: `unfulfilled → echoing` (first oblique
+reference); `echoing → half_fulfilled` (one literal element shown true);
+`→ fulfilled` (only on climax/resolution beats); `→ broken` (only when a
+beat fails the prophecy's image).
 
 ## Voice — read this twice
 
