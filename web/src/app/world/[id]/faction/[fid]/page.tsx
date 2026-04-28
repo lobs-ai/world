@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { Fleuron, IntensityBar, Portrait, SectionHead } from "@/components/Primitives";
 import { Nav } from "@/components/Nav";
+import { ChronicleImage, imageUrlFromPath } from "@/components/ChronicleImage";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +82,7 @@ export default function FactionPage({
                   style={{ textDecoration: "none", color: "inherit", padding: "10px 0", borderTop: "0.5px solid var(--rule)" }}
                 >
                   <div className="display-sc" style={{ fontSize: 11, letterSpacing: "0.22em", color: "var(--ink-faint)" }}>
-                    {p.tier} · {p.state}
+                    {p.tier === "spine" ? "the spine" : p.tier === "subplot" ? "a thread" : "a slow burn"}
                   </div>
                   <div className="display" style={{ fontSize: 20, fontStyle: "italic" }}>{p.title}</div>
                 </Link>
@@ -98,6 +99,9 @@ export default function FactionPage({
                   className="row-link"
                   style={{ textDecoration: "none", color: "inherit", display: "block" }}
                 >
+                  {seat.imagePath && (
+                    <ChronicleImage path={seat.imagePath} alt={seat.name} aspect="16 / 9" />
+                  )}
                   <div className="display" style={{ fontSize: 22, fontStyle: "italic" }}>{seat.name}</div>
                   <p style={{ fontSize: 14, color: "var(--ink-soft)", margin: 0, fontStyle: "italic" }}>
                     {seat.description}
@@ -110,31 +114,50 @@ export default function FactionPage({
               {members.length === 0 && (
                 <p style={{ fontStyle: "italic", color: "var(--ink-faint)" }}>None at present.</p>
               )}
-              {members.map((m) => (
-                <Link
-                  key={m.id}
-                  href={`/world/${world.id}/character/${m.id}`}
-                  className="row-link"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "48px 1fr",
-                    gap: 12,
-                    alignItems: "center",
-                    padding: "8px 0",
-                    borderTop: "0.5px solid var(--rule)",
-                    textDecoration: "none",
-                    color: "inherit",
-                  }}
-                >
-                  <Portrait label="" w={48} h={60} />
-                  <div>
-                    <div className="display" style={{ fontSize: 18, fontStyle: "italic" }}>{m.name}</div>
-                    <div style={{ fontSize: 12, color: "var(--ink-faint)", fontStyle: "italic" }}>
-                      {m.epithet} · {m.weight}
+              {members.map((m) => {
+                const url = imageUrlFromPath(m.imagePath);
+                return (
+                  <Link
+                    key={m.id}
+                    href={`/world/${world.id}/character/${m.id}`}
+                    className="row-link"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "48px 1fr",
+                      gap: 12,
+                      alignItems: "center",
+                      padding: "8px 0",
+                      borderTop: "0.5px solid var(--rule)",
+                      textDecoration: "none",
+                      color: "inherit",
+                    }}
+                  >
+                    {url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={url}
+                        alt={m.name}
+                        style={{
+                          width: 48,
+                          height: 60,
+                          objectFit: "cover",
+                          border: "0.5px solid rgba(0,0,0,0.16)",
+                          background: "var(--paper-deep)",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      <Portrait name={m.name} w={48} h={60} />
+                    )}
+                    <div>
+                      <div className="display" style={{ fontSize: 18, fontStyle: "italic" }}>{m.name}</div>
+                      <div style={{ fontSize: 12, color: "var(--ink-faint)", fontStyle: "italic" }}>
+                        {m.epithet}
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </div>

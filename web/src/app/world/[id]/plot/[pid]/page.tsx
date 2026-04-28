@@ -3,10 +3,29 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { Portrait, SectionHead } from "@/components/Primitives";
 import { Nav } from "@/components/Nav";
+import { imageUrlFromPath } from "@/components/ChronicleImage";
 
 export const dynamic = "force-dynamic";
 
 const STATES = ["seeded", "setup", "rising", "climax", "falling", "resolved"] as const;
+const STATE_LABEL: Record<typeof STATES[number], string> = {
+  seeded: "Seeded",
+  setup: "Setup",
+  rising: "Rising",
+  climax: "Climax",
+  falling: "Falling",
+  resolved: "Resolved",
+};
+const BEAT_LABEL: Record<string, string> = {
+  setup: "Setup",
+  complication: "Complication",
+  rising: "Rising",
+  climax: "Climax",
+  falling: "Falling",
+  resolution: "Resolution",
+  world_report: "Report",
+  private: "Quiet Hour",
+};
 
 export default function PlotPage({
   params,
@@ -77,7 +96,7 @@ export default function PlotPage({
                       fontWeight: current ? 600 : 400,
                     }}
                   >
-                    {s}
+                    {STATE_LABEL[s]}
                   </div>
                 </div>
               );
@@ -112,7 +131,7 @@ export default function PlotPage({
                         }}
                       />
                       <div className="mono" style={{ fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--ink-faint)", marginBottom: 4 }}>
-                        {b.when} · {b.type}
+                        {b.when} · {BEAT_LABEL[b.type] ?? b.type}
                       </div>
                       <div className="display" style={{ fontSize: 22, fontStyle: "italic", marginBottom: 6 }}>
                         {b.title}
@@ -148,6 +167,7 @@ export default function PlotPage({
               {p.central.map((cid) => {
                 const c = db().getCharacter(world.id, cid);
                 if (!c) return null;
+                const url = imageUrlFromPath(c.imagePath);
                 return (
                   <Link
                     key={cid}
@@ -163,7 +183,23 @@ export default function PlotPage({
                       color: "inherit",
                     }}
                   >
-                    <Portrait label="" w={48} h={60} />
+                    {url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={url}
+                        alt={c.name}
+                        style={{
+                          width: 48,
+                          height: 60,
+                          objectFit: "cover",
+                          border: "0.5px solid rgba(0,0,0,0.16)",
+                          background: "var(--paper-deep)",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      <Portrait name={c.name} w={48} h={60} />
+                    )}
                     <div>
                       <div className="display" style={{ fontSize: 18, fontStyle: "italic" }}>{c.name}</div>
                       <div style={{ fontSize: 13, color: "var(--ink-faint)", fontStyle: "italic" }}>{c.epithet}</div>

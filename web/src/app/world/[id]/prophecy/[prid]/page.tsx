@@ -23,9 +23,6 @@ export default function ProphecyPage({
   if (!world) notFound();
   const p = db().getProphecy(world.id, params.prid);
   if (!p) notFound();
-  const tickNow = world.tick;
-  const overdue = tickNow > p.targetPayoffMax;
-  const inWindow = tickNow >= p.targetPayoffMin && tickNow <= p.targetPayoffMax;
   const relatedPlots = p.relatedPlotIds
     .map((id) => db().getPlot(world.id, id))
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -63,11 +60,6 @@ export default function ProphecyPage({
                 ? "No echo has yet been struck."
                 : `Echoed ${p.echoes} time${p.echoes === 1 ? "" : "s"} in the chronicle.`}
             </p>
-
-            <div className="mono" style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ink-faint)", marginTop: 18 }}>
-              payoff window: ticks {p.targetPayoffMin}–{p.targetPayoffMax}<br />
-              now: tick {tickNow}{overdue ? " · overdue" : inWindow ? " · in window" : " · awaiting"}
-            </div>
           </div>
 
           <div>
@@ -84,7 +76,7 @@ export default function ProphecyPage({
                   style={{ textDecoration: "none", color: "inherit", padding: "8px 0", borderTop: "0.5px solid var(--rule)" }}
                 >
                   <div className="display-sc" style={{ fontSize: 11, letterSpacing: "0.22em", color: "var(--ink-faint)" }}>
-                    {rp.tier} · {rp.state}
+                    {rp.tier === "spine" ? "the spine" : rp.tier === "subplot" ? "a thread" : "a slow burn"}
                   </div>
                   <div className="display" style={{ fontSize: 18, fontStyle: "italic" }}>{rp.title}</div>
                 </Link>

@@ -19,10 +19,30 @@ export default function CharacterPage({
   const place = db().getLocation(world.id, c.where);
   const rels = db().listRelationshipsFrom(world.id, c.id);
   const memories = db().listMemories(world.id, c.id).slice(0, 6);
-  const appearances = db()
-    .listEntries(world.id, 30)
+  const recentEntries = db().listEntries(world.id, 80);
+  const appearances = recentEntries
     .filter((e) => e.characterIds.includes(c.id))
-    .slice(0, 4);
+    .slice(0, 5);
+
+  // Selected sayings: scan recent chronicle entries for dialogue
+  // paragraphs spoken by this character. We capture the entry context
+  // (title + date) so each saying can be cited; cap at 6 so the panel
+  // stays a quotebook, not a dump.
+  const sayings: { text: string; entryTitle: string; entryId: string; inWorldDate: string }[] = [];
+  for (const e of recentEntries) {
+    for (const p of e.paragraphs) {
+      if (p.kind === "dialogue" && p.who === c.id) {
+        sayings.push({
+          text: p.text,
+          entryTitle: e.title,
+          entryId: e.id,
+          inWorldDate: e.inWorldDate,
+        });
+        if (sayings.length >= 6) break;
+      }
+    }
+    if (sayings.length >= 6) break;
+  }
 
   return (
     <div className="paper" style={{ minHeight: "100vh" }}>
@@ -47,7 +67,7 @@ export default function CharacterPage({
                 }}
               />
             ) : (
-              <Portrait label={c.portrait} w={180} h={220} />
+              <Portrait name={c.name} w={180} h={220} />
             );
           })()}
           <div>
@@ -63,9 +83,6 @@ export default function CharacterPage({
             <p style={{ fontSize: 18, color: "var(--ink-soft)", maxWidth: "56ch" }}>{c.summary}</p>
             <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
               <span className="tag">{c.age} years</span>
-              <span className={`tag${c.weight === "principal" ? " accent" : ""}`}>
-                {c.weight}
-              </span>
               {c.factionId && (
                 <Link
                   href={`/world/${world.id}/faction/${c.factionId}`}
@@ -171,9 +188,6 @@ export default function CharacterPage({
                   </div>
                 );
               })}
-              <p style={{ fontSize: 13, color: "var(--ink-faint)", fontStyle: "italic", marginTop: 4 }}>
-                These are how <em>{c.name.split(" ")[0]}</em> holds the others. The others may hold them differently.
-              </p>
             </div>
           </div>
 
@@ -201,6 +215,49 @@ export default function CharacterPage({
                 </Link>
               ))}
             </div>
+
+            {sayings.length > 0 && (
+              <>
+                <SectionHead kicker="lines they have spoken">Selected sayings</SectionHead>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 18 }}>
+                  {sayings.map((s, i) => (
+                    <li
+                      key={i}
+                      style={{
+                        paddingLeft: 18,
+                        borderLeft: "2px solid var(--accent-deep)",
+                      }}
+                    >
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 17,
+                          fontStyle: "italic",
+                          color: "var(--ink)",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {trimQuote(s.text)}
+                      </p>
+                      <Link
+                        href={`/world/${world.id}#${s.entryId}`}
+                        style={{
+                          fontSize: 12,
+                          color: "var(--ink-faint)",
+                          fontStyle: "italic",
+                          marginTop: 6,
+                          display: "inline-block",
+                          textDecoration: "none",
+                          borderBottom: "0.5px dotted var(--ink-ghost)",
+                        }}
+                      >
+                        — in &ldquo;{s.entryTitle}&rdquo;, {s.inWorldDate}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
 
             <SectionHead kicker="memories, weighted">What stays with them</SectionHead>
             {memories.length === 0 && (
@@ -235,4 +292,23 @@ export default function CharacterPage({
       </div>
     </div>
   );
+}
+
+// Some scribe outputs include the surrounding quote marks ("..."), some
+// don't. Strip a single matching pair so the styled blockquote doesn't
+// double-quote the line. Leave embedded marks alone.
+function trimQuote(s: string): string {
+  const t = s.trim();
+  const open = t[0];
+  const close = t[t.length - 1];
+  const pairs: Array<[string, string]> = [
+    ['"', '"'],
+    ['"', '"'],
+    ['“', '”'],
+    ['‘', '’'],
+  ];
+  for (const [a, b] of pairs) {
+    if (open === a && close === b) return t.slice(1, -1).trim();
+  }
+  return t;
 }

@@ -56,7 +56,18 @@ export async function characterAct(
       mySecrets: me.secrets.map((text, index) => ({ index, text })),
     },
     scene: {
-      where: here ? { name: here.name, description: here.description, weather: here.weather } : null,
+      where: here
+        ? {
+            id: here.id,
+            name: here.name,
+            // `type` lets the character judge whether the place is public
+            // (inn, market, court, gate) or private (chamber, hermitage,
+            // a bedside) — gates the rumor_planted decision.
+            type: here.type,
+            description: here.description,
+            weather: here.weather,
+          }
+        : null,
       pacing: plan.pacingNote,
       beat: plan.sketch,
       others: sceneOthers,

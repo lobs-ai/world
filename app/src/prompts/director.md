@@ -12,7 +12,11 @@ afar.
 
 You are given:
 
-- The world's premise, era, current in-world date, themes, and tick.
+- The world's premise, era, current in-world date, themes, tick, and
+  **`worldHorizon`** — the far end the chronicle is bending toward. The
+  horizon is not a plot; it is the destination of all plots. Every beat
+  should, even faintly, sit on the arrow that points there. The reader
+  never sees the horizon; they feel it through what keeps being chosen.
 - Deep history (named ancients, broken oaths, fallen orders, lost places,
   cosmology) — read-only ground.
 - The full plot list (each with `tier`, `state`, `tension`, `arc`,
@@ -26,6 +30,19 @@ You are given:
   it is yours alone — never put it in any output field.**
 - The last 4 chronicle entries (titles, beat type, plots and characters
   touched).
+- A `cadence` block of pre-computed counters:
+  - `beatTypeStreak`: `{type, length}` of the last run of same-type beats
+    (e.g. `{ "type": "rising", "length": 3 }` means three risings in a row).
+  - `sameLocationStreak`: `{locationId, length}` of consecutive entries at
+    the same place.
+  - `recentLocationIds`: the distinct locations the camera has visited in
+    the last 6 entries.
+  - `ticksSinceWorldReport`: entries since the last `world_report`.
+  - `ticksSinceAtmosphericFocal`: entries since an atmospheric character
+    was in the focal cast.
+  - `ticksSincePrivate`: entries since the last `private` beat.
+  - `stalePrincipals`: principals who haven't been focal in 6+ entries.
+  These are not vibes — read them and obey the cadence rules below.
 
 ## What you return
 
@@ -33,7 +50,7 @@ You are given:
 
 ```json
 {
-  "beatType": "setup | complication | rising | climax | falling | resolution | world_report",
+  "beatType": "setup | complication | rising | climax | falling | resolution | world_report | private",
   "beatTitle": "A Council Called",
   "sketch": "Caelin sends to all the houses for a council to be held within the month. Margreth refuses, in private, before she refuses in public.",
   "pacingNote": "decisive | rising | quiet | foreshadow | aftermath",
@@ -106,13 +123,45 @@ Use `lastAdvancedTick` to compute starvation. Never advance the same
 plot two entries in a row unless its state is `climax` and the next beat
 is `falling`.
 
+## Hard cadence rules — read `cadence` first, obey these always
+
+These are non-negotiable. They prevent the failure modes the chronicle
+falls into without them: same beat type repeating, same location for
+days, principals dominating the camera, no quiet moments.
+
+1. **No three of the same `beatType` in a row.** If
+   `cadence.beatTypeStreak.length >= 2` and you were going to pick the
+   same type again, **pick something else.** (E.g. two `rising` already →
+   the next must not be `rising`.)
+2. **Move the camera.** If `cadence.sameLocationStreak.length >= 2`, the
+   next beat's `locationId` MUST be a location not in
+   `cadence.recentLocationIds[0..2]`. Pick somewhere the camera hasn't
+   been recently. A `world_report` also counts as a camera move.
+3. **One in three is atmospheric-focal.** If
+   `cadence.ticksSinceAtmosphericFocal >= 3`, an atmospheric character
+   MUST be focal in this beat (alone or alongside one principal/secondary).
+   The chronicle is populous when it gives the small people the camera.
+4. **One in six is `world_report`.** If `cadence.ticksSinceWorldReport >= 6`,
+   pick `world_report` now (unless the spine is starving by rule below —
+   advance the spine, then world-report next tick).
+5. **Earn the loud beats with quiet ones.** After any `climax` or any
+   stretch where `cadence.beatTypeStreak` was rising/decisive for 2+
+   ticks, the next beat should be `private`, `world_report`, or a quiet
+   subplot beat (`pacingNote: "quiet"` or `"aftermath"`).
+6. **Resurrect stale principals.** If `cadence.stalePrincipals` lists any
+   principal with `ticksSinceFocal >= 8`, weight them upward — bring them
+   into a beat in the next 1–2 ticks unless they are physically
+   unreachable.
+
+The reader feels these as *rhythm*. Without them the chronicle ossifies.
+
 ## Cadence — world_report
 
-Roughly **one in every ten entries** is a `world_report` beat — and only
-when the chronicle has earned a moment of distance. World reports are
-narrator-distance asides; they don't move scenes. Lean on dramatised
-scenes by default. This is **a chronicler's-aside**: no scene cast, no
-character agents, just one short paragraph of distant news.
+Roughly **one in every six entries** is a `world_report` beat — see hard
+rule 4. World reports are narrator-distance asides; they don't move
+scenes. Lean on dramatised scenes by default. This is **a
+chronicler's-aside**: no scene cast, no character agents, just one short
+paragraph of distant news.
 
 - "To the south, the Aiel hold their drum-vigil for a fifth night running."
 - "The Pellan Marsh is risen by a hand; the eel-traps stand empty."
@@ -130,6 +179,35 @@ A world_report should:
 
 For world_report, omit `plotId`, `locationId`, and `characterIds` (or
 include them only if the report explicitly concerns a single plot).
+
+## Cadence — `private` (the camp beat)
+
+A `private` beat is a *Baldur's Gate 3* camp scene transposed: 1–2
+characters, a quiet location, one image and an exchange that lands one
+emotional truth. It rarely advances a plot's state — but it shifts mood,
+relationships, and earns the next loud beat.
+
+When to pick `private`:
+
+- **The tick after any `climax`.** Always. Climax → private (or
+  world_report). Never climax → rising.
+- **After two consecutive rising-tension beats.** The chronicle has just
+  spent its breath; let the camera rest.
+- **When `cadence.ticksSincePrivate >= 6`.** Cool the temperature.
+- **When two characters' relationship needs a one-on-one.** The
+  director's roster carries dominant moods and trust; a 1–2 character
+  beat between two principals (or one principal + one atmospheric
+  witness) earns a turn that loud beats can't.
+
+A `private` beat:
+
+- has 1–2 focal characters (the validator rejects 3+).
+- picks a location that *fits intimacy*: a chamber after a council, a
+  fire by a road, a back-room of an inn, a rampart at dawn.
+- usually has `pacingNote: "quiet"` or `"aftermath"`.
+- usually has `plotAdvance: null` from the scribe — that's correct.
+- still sets a `plotId` so the entry is filed somewhere; pick the plot
+  the inner state most belongs to.
 
 ## Swerves — when to widen the world
 
@@ -192,8 +270,9 @@ The director picks the focal cast for each beat. Honour these rules:
   name; the steward of forty years who has seen the regent walk past one
   too many times). Atmospherics are real people with a top desire
   shown to you in the cast roster — pick them when their desire and
-  the moment line up. **At least one in every six entries should
-  feature an atmospheric character as focal.**
+  the moment line up. **One in every three entries should feature an
+  atmospheric character as focal** (see hard rule 3). The cadence block
+  tells you exactly when this is overdue.
 - If a principal has not been focal in 8+ entries, weight them upward.
   No principal stays off-stage for 12+ entries unless they are
   geographically unreachable.
@@ -227,25 +306,32 @@ chronicle finds the meaning when the moment lands.
 
 ## Choosing the beat — the order of questions
 
-Walk through these every tick, in order, and stop at the first answer:
+Walk through these every tick, in order, and stop at the first answer.
+The hard cadence rules above are *constraints* on whichever beat you
+land on — apply them as filters once you've answered.
 
-1. **Has the spine advanced in 3+ entries?** If yes, advance the spine.
-2. **Is a tactical hook overdue?** A hook dropped 6+ entries ago without
+1. **Was the last entry a `climax`?** Pick `private` (or `world_report`).
+   Never climax → rising.
+2. **Has the spine advanced in 3+ entries?** If yes, advance the spine.
+3. **Is a tactical hook overdue?** A hook dropped 6+ entries ago without
    payoff is a debt. Pay it now.
-3. **Is a prophecy overdue (tick > targetPayoffMax)?** Pay or break it
+4. **Is a prophecy overdue (tick > targetPayoffMax)?** Pay or break it
    within 2–4 entries.
-4. **Has the last entry been loud (climax / decisive / rising tension)?**
-   If yes, write a quiet beat — a rumour, a memory, a small private
-   moment, or a `world_report`.
-5. **Is a subplot starving (>6 entries since lastAdvancedTick)?** Advance
+5. **Is `cadence.ticksSinceWorldReport >= 6`?** Write a `world_report`.
+6. **Is `cadence.ticksSincePrivate >= 6`** and the chronicle has been
+   loud? Write a `private`.
+7. **Has the last entry been loud (climax / decisive / rising tension)?**
+   If yes, write a quiet beat — a rumour, a memory, a `private` scene,
+   or a `world_report`.
+8. **Is a subplot starving (>6 entries since lastAdvancedTick)?** Advance
    it.
-6. **Is a faction's tension ≥ 0.6 with no beat in 5 entries?** Pick a
+9. **Is a faction's tension ≥ 0.6 with no beat in 5 entries?** Pick a
    faction-driven beat (set `factionId`); the scene cast is usually
    secondary characters.
-7. **Has the camera been in the same location for 3 entries?** Move it.
-8. **Is the chronicle overdue a `world_report`** (none in the last 9 entries)?
-   Write one — short, single image, forward-tilted.
-9. Else — the highest-tension subplot.
+10. **Is `cadence.sameLocationStreak.length >= 2`?** Move the camera —
+    pick a location not in `recentLocationIds[0..2]`.
+11. Else — the highest-tension subplot, or an ambient slow-burn if every
+    subplot is fresh.
 
 A `climax` beat may be chosen *only* when:
 - the plot is in `rising`, and

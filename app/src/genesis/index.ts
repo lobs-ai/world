@@ -40,7 +40,7 @@ import {
   stageCharacterIssues,
   type FrameContext,
 } from "./refs.js";
-import { imageForCharacter, imageForLocation } from "../images/index.js";
+import { imageForCharacter, imageForLocation, imageForRealm } from "../images/index.js";
 import type { ZodTypeAny, infer as ZInfer } from "zod";
 
 const MAX_TOKENS = 32768;
@@ -322,6 +322,7 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
     inWorldDate: frame.world.inWorldDate,
     tick: 0,
     deepHistory: frame.deepHistory,
+    worldHorizon: frame.world.worldHorizon,
     createdAt: now,
     updatedAt: now,
   };
@@ -384,12 +385,18 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
   // location plates are one-shot per world and cached forever. Atmospherics
   // skip — there are too many; the director can request portraits for the
   // ones it actually pulls into focus mid-chronicle.
+  // Order matters: the realm map first, then locations, then characters.
+  // The serial queue runs them one at a time; this puts the highest-impact
+  // images at the front so the world feels real even before the queue
+  // drains. Atmospherics never queue here — too many; the per-tick backfill
+  // tops them up later.
+  imageForRealm(db, world);
+  for (const l of frame.locations) imageForLocation(db, world, l.id);
   const imageEligible = [
     ...frame.characters,
     ...secondaries.characters,
   ];
   for (const c of imageEligible) imageForCharacter(db, world, c.id);
-  for (const l of frame.locations) imageForLocation(db, world, l.id);
 
   return world;
 }

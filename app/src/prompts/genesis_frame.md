@@ -27,7 +27,8 @@ Return one fenced JSON block matching this shape, and **nothing else**.
     "tone": "grimdark",
     "themes": ["inheritance deferred", "mercy as a kind of lie"],
     "era": "the Year of the Owl, being the four-and-fortieth of King Oren the Patient",
-    "inWorldDate": "the third evening after the Feast of Lanterns"
+    "inWorldDate": "the third evening after the Feast of Lanterns",
+    "worldHorizon": "The chronicle bends toward the night the king finally dies and the Pact of the Dying Light breaks, and toward the dawn after — when whoever wears the crown will have to answer to the Pale Queen, awake at last."
   },
   "deepHistory": {
     "ancients": [
@@ -92,7 +93,9 @@ Return one fenced JSON block matching this shape, and **nothing else**.
       "name": "The Highkeep at Aelmere",
       "type": "capital",
       "description": "A pale stone keep set on a chalk bluff above the river Owl.",
-      "weather": "low cloud; smell of woodsmoke and lye"
+      "weather": "low cloud; smell of woodsmoke and lye",
+      "coordinates": { "x": 0.46, "y": 0.40 },
+      "region": "the heart of the realm"
     }
   ],
   "plots": [
@@ -177,6 +180,51 @@ Use whatever fits the place: `"capital"`, `"town"`, `"village"`, `"ruin"`,
 `"wilderness"`, `"fortress"`, `"inn"`, `"abbey"`, `"crossroads"`, `"marsh-shrine"`,
 `"seat of a great house"`, `"hermitage"`. One or two words, lower-case,
 no punctuation. The UI renders it verbatim as `"a {type} of the realm"`.
+
+#### `coordinates` — placing the place on the map
+
+Each location carries `coordinates: { x, y }`, both 0..1, normalized over a
+horizontal (16:9) realm-parchment that the chronicle paints once at
+genesis. Origin is **top-left**: `x` grows west→east, `y` grows
+north→south. Use 0.05..0.95 — keep markers off the edge.
+
+Constraints:
+
+- The capital sits roughly central (x ≈ 0.4..0.6, y ≈ 0.35..0.55).
+- Northern places (the marches, mountain seats, the cold) get y ≤ 0.30.
+- Southern places (the marsh, the warm coast, the orchard towns) get y ≥ 0.70.
+- Eastern roads / borders / sea: x ≥ 0.70. Western: x ≤ 0.30.
+- A location's coordinates should be **consistent with its `description`**
+  and with the realm imagery you imply (a "river-mouth fishing town" is on
+  a coast, not the centre; "a city under the marsh" is in marsh country).
+- No two locations within 0.05 of each other unless they are paired
+  (a town and its abbey).
+
+The `region` field is a short prose label that groups places: "the
+northern marches", "the marsh and its drowned shrines", "the heart of
+the realm", "the orchard country". Two to four regions across the
+location list, and every location names which one it belongs to.
+
+### worldHorizon — the far end the chronicle is bending toward
+
+This is the chronicle's *Tarmon Gai'don* — the destination the whole
+thing is pulling toward, even when the camera is in a marsh hut or a
+tavern hall. One or two sentences in chronicler's voice, written so
+that fifty entries from now and two hundred from now both still sit on
+the same arrow. It is **larger than any single plot** — the spine is
+the road there; the horizon is the place the road ends.
+
+Constraints:
+
+- Concrete enough to be paid (a coronation, a war's last day, a god's
+  waking, a city's fall, a curse's lifting). Not an abstraction.
+- Reachable in roughly 200–600 ticks; not so close it overruns the
+  spine, not so far it never lands.
+- It threads through prophecies — the hidden meanings of your prophecies
+  should, taken together, gesture at it.
+- The director sees it; the scribe and the characters never do. The
+  reader feels its gravity through what beats keep being chosen, never
+  through narration.
 
 ### Field rules — read once, then obey
 

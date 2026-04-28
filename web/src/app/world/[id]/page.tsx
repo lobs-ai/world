@@ -4,7 +4,8 @@ import type { ChronicleEntry, Paragraph } from "@world/app";
 import { db } from "@/lib/db";
 import { Fleuron } from "@/components/Primitives";
 import { Nav } from "@/components/Nav";
-import { ChronicleImage } from "@/components/ChronicleImage";
+import { ChronicleImage, imageUrlFromPath } from "@/components/ChronicleImage";
+import { latestPullQuote, mainStory, storySoFar } from "@/lib/story";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,9 @@ export default function ChroniclePage({ params }: { params: { id: string } }) {
   const world = db().getWorld(params.id);
   if (!world) notFound();
   const entries = db().listEntries(world.id, 30);
+  const story = mainStory(world);
+  const sof = storySoFar(world);
+  const pullQuote = latestPullQuote(world);
 
   return (
     <div className="paper" style={{ minHeight: "100vh" }}>
@@ -37,12 +41,144 @@ export default function ChroniclePage({ params }: { params: { id: string } }) {
         <Fleuron glyph="✦   ✦   ✦" />
       </section>
 
+      {/* ── Story So Far hero ────────────────────────────────────────── */}
+      {story.protagonist && entries.length > 0 && (
+        <section
+          style={{
+            position: "relative",
+            zIndex: 1,
+            maxWidth: 1100,
+            margin: "0 auto 60px",
+            padding: "0 64px",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "200px 1fr",
+              gap: 36,
+              padding: "32px 36px",
+              border: "0.5px solid var(--rule)",
+              background: "var(--paper-deep)",
+              alignItems: "start",
+            }}
+          >
+            <Link
+              href={`/world/${world.id}/story`}
+              style={{ textDecoration: "none", color: "inherit", display: "block" }}
+            >
+              {(() => {
+                const url = imageUrlFromPath(story.protagonist!.imagePath);
+                return url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={url}
+                    alt={story.protagonist!.name}
+                    style={{
+                      width: 200,
+                      height: 250,
+                      objectFit: "cover",
+                      border: "0.5px solid rgba(0,0,0,0.18)",
+                      display: "block",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 200,
+                      height: 250,
+                      background: "var(--paper)",
+                      border: "0.5px solid rgba(0,0,0,0.16)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontFamily: "var(--display)",
+                      fontStyle: "italic",
+                      fontSize: 60,
+                      color: "var(--ink-faint)",
+                    }}
+                  >
+                    {story
+                      .protagonist!.name.split(/\s+/)
+                      .slice(0, 2)
+                      .map((s) => s[0]!)
+                      .join("")}
+                  </div>
+                );
+              })()}
+            </Link>
+            <div>
+              <div className="display-sc" style={{ fontSize: 11, letterSpacing: "0.32em", color: "var(--accent-deep)", marginBottom: 8 }}>
+                the story so far
+              </div>
+              <h2 className="display" style={{ fontSize: 36, fontStyle: "italic", lineHeight: 1.05, marginBottom: 4 }}>
+                <Link href={`/world/${world.id}/story`} style={{ color: "inherit", textDecoration: "none" }}>
+                  {story.spine?.title ?? story.protagonist.name}
+                </Link>
+              </h2>
+              <div style={{ fontSize: 14, fontStyle: "italic", color: "var(--ink-faint)", marginBottom: 16 }}>
+                {story.protagonist.name} — {story.protagonist.epithet}
+              </div>
+              <p style={{ fontSize: 16, lineHeight: 1.55, color: "var(--ink-soft)", margin: 0, fontStyle: "italic" }}>
+                {sof.arc}
+              </p>
+              {sof.latestBeatTitle && (
+                <p style={{ fontSize: 14, color: "var(--ink-faint)", marginTop: 12, fontStyle: "italic" }}>
+                  Most recently: <span style={{ color: "var(--ink-soft)" }}>{sof.latestBeatTitle}</span>
+                  {sof.latestBeatSketch ? ` — ${sof.latestBeatSketch}` : ""}
+                </p>
+              )}
+              {pullQuote && (
+                <blockquote
+                  style={{
+                    margin: "20px 0 0 0",
+                    paddingLeft: 16,
+                    borderLeft: "2px solid var(--accent-deep)",
+                    fontSize: 16,
+                    fontStyle: "italic",
+                    color: "var(--ink)",
+                  }}
+                >
+                  {pullQuote.quote}
+                  {pullQuote.speakerName && (
+                    <span style={{ display: "block", fontSize: 12, color: "var(--ink-faint)", marginTop: 6, fontStyle: "italic" }}>
+                      — {pullQuote.speakerName}, in “{pullQuote.entryTitle}”
+                    </span>
+                  )}
+                </blockquote>
+              )}
+              <div style={{ marginTop: 22, display: "flex", gap: 14 }}>
+                <Link
+                  href={`/world/${world.id}/story`}
+                  className="inline-link"
+                  style={{ fontSize: 13, color: "var(--accent-deep)", letterSpacing: "0.04em" }}
+                >
+                  Open the full story →
+                </Link>
+                <Link
+                  href={`/world/${world.id}/about`}
+                  className="inline-link"
+                  style={{ fontSize: 13, color: "var(--ink-faint)" }}
+                >
+                  Or wander the world
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section style={{ position: "relative", zIndex: 1, padding: "0 64px 120px", maxWidth: 1280, margin: "0 auto" }}>
         <div style={{ maxWidth: "64ch", marginInline: "auto", position: "relative" }}>
           {entries.length === 0 ? (
-            <p style={{ textAlign: "center", fontStyle: "italic", color: "var(--ink-faint)", padding: "40px 0" }}>
-              The first writ has not yet been set down. Run <span className="mono">npm run tick {world.id}</span> to make the chronicle move.
-            </p>
+            <div style={{ textAlign: "center", padding: "60px 0" }}>
+              <p style={{ fontStyle: "italic", color: "var(--ink-soft)", fontSize: 18, margin: 0 }}>
+                The chronicle has just begun.
+              </p>
+              <p style={{ fontStyle: "italic", color: "var(--ink-faint)", fontSize: 14, marginTop: 6 }}>
+                The first writ is being set down. Return in a moment.
+              </p>
+            </div>
           ) : (
             entries.map((e, i) => (
               <ChronicleArticle
@@ -334,6 +470,8 @@ function readableBeatType(b: string): string {
       return "Resolution";
     case "world_report":
       return "Report from the Realm";
+    case "private":
+      return "A Quiet Hour";
     default:
       return b;
   }

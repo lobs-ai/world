@@ -62,7 +62,7 @@ export default function ThreadsPage({ params }: { params: { id: string } }) {
               style={{ textDecoration: "none", color: "inherit" }}
             >
               <div className="display-sc" style={{ fontSize: 11, letterSpacing: "0.28em", color: "var(--ink-faint)", marginBottom: 6 }}>
-                tension {(f.tension * 100).toFixed(0)}
+                {factionMood(f.tension)}
               </div>
               <div className="display" style={{ fontSize: 22, fontStyle: "italic", marginBottom: 4 }}>
                 {f.name}
@@ -96,10 +96,7 @@ export default function ThreadsPage({ params }: { params: { id: string } }) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
                 <span className="display-sc" style={{ fontSize: 12, letterSpacing: "0.22em", color: "var(--accent-deep)" }}>
-                  {p.status.replace("_", " ")}
-                </span>
-                <span className="mono" style={{ fontSize: 10.5, letterSpacing: "0.14em", color: "var(--ink-faint)", textTransform: "uppercase" }}>
-                  payoff: ticks {p.targetPayoffMin}–{p.targetPayoffMax}
+                  {prophecyStatusLabel(p.status)}
                 </span>
               </div>
               <p style={{ fontStyle: "italic", fontSize: 19, margin: 0, color: "var(--ink)" }}>
@@ -141,10 +138,7 @@ function PlotTier({
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
               <span className="display-sc" style={{ fontSize: 11, letterSpacing: "0.28em", color: "var(--ink-faint)" }}>
-                {p.tier} · {p.state} · tension {(p.tension * 100).toFixed(0)}
-              </span>
-              <span className="mono" style={{ fontSize: 10.5, letterSpacing: "0.14em", color: "var(--ink-faint)", textTransform: "uppercase" }}>
-                {p.beats.length} beats
+                {plotMood(p.state, p.tension)}
               </span>
             </div>
             <div className="display" style={{ fontSize: 26, fontStyle: "italic", marginBottom: 6 }}>
@@ -158,4 +152,37 @@ function PlotTier({
       </div>
     </>
   );
+}
+
+function factionMood(tension: number): string {
+  if (tension >= 0.85) return "on the brink";
+  if (tension >= 0.65) return "fraying";
+  if (tension >= 0.4) return "watchful";
+  if (tension >= 0.2) return "quiet, for now";
+  return "at rest";
+}
+
+function plotMood(state: string, tension: number): string {
+  if (state === "resolved") return "resolved";
+  if (state === "climax") return "at its turning";
+  if (state === "falling") return "the dust settling";
+  if (tension >= 0.75) return "rising sharply";
+  if (state === "rising") return "rising";
+  if (state === "setup") return "newly opened";
+  return "still gathering";
+}
+
+function prophecyStatusLabel(s: string): string {
+  switch (s) {
+    case "echoing":
+      return "echoes already heard";
+    case "half_fulfilled":
+      return "half-true so far";
+    case "fulfilled":
+      return "the moment paid";
+    case "broken":
+      return "broken";
+    default:
+      return "not yet paid, not yet broken";
+  }
 }

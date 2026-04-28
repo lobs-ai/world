@@ -21,7 +21,7 @@ import type {
   PlotBeat,
   WorldId,
 } from "./world/types.js";
-import { imageForCharacter, imageForScene } from "./images/index.js";
+import { backfillMissingImages, imageForCharacter, imageForScene } from "./images/index.js";
 
 export interface TickResult {
   ok: boolean;
@@ -107,15 +107,27 @@ export async function runTick(db: Db, worldId: WorldId): Promise<TickResult> {
       .map((cid) => db.getCharacter(worldId, cid))
       .filter((c): c is NonNullable<typeof c> => c !== null);
 
-    for (const c of cast) {
-      const others = cast
-        .filter((o) => o.id !== c.id)
-        .map((o) => ({ id: o.id, name: o.name, epithet: o.epithet }));
-      try {
-        const action = await characterAct(db, worldId, c.id, plan, others);
-        actions.push({ characterId: c.id, action });
-      } catch (err) {
-        notes.push(`character ${c.id}: ${(err as Error).message}`);
+    // Character agents are read-only against the DB during the act phase, so
+    // run them in parallel. Wall-clock per tick used to be (director + N×char +
+    // scribe) sequential; now it's max(char) instead of sum(char).
+    const settled = await Promise.allSettled(
+      cast.map((c) => {
+        const others = cast
+          .filter((o) => o.id !== c.id)
+          .map((o) => ({ id: o.id, name: o.name, epithet: o.epithet }));
+        return characterAct(db, worldId, c.id, plan, others).then((action) => ({
+          characterId: c.id,
+          action,
+        }));
+      }),
+    );
+
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i]!;
+      if (r.status === "fulfilled") {
+        actions.push(r.value);
+      } else {
+        notes.push(`character ${cast[i]!.id}: ${(r.reason as Error).message}`);
       }
     }
 
@@ -254,6 +266,52 @@ export async function runTick(db: Db, worldId: WorldId): Promise<TickResult> {
     };
     db.insertEntry(entry);
 
+    // ── Memory propagation ────────────────────────────────────────────
+    // Off-stage characters who *would have heard* about this scene gain a
+    // low-weight memory. Without this, only the focal cast ever has an
+    // opinion about anything, and the world doesn't feel populated. We
+    // propagate to anyone with a strong-enough relationship (trust ≥ 0.3
+    // or affection ≥ 0.3) to a focal participant, capped to keep memory
+    // tables manageable. Skipped for world_report (no focal cast) and for
+    // private beats (the whole point is the audience is small).
+    if (plan.beatType !== "world_report" && plan.beatType !== "private" && charIds.length > 0) {
+      const PROPAGATION_CAP = 12;
+      const seen = new Set<string>(charIds);
+      const candidates: { characterId: string; weight: number }[] = [];
+      for (const focalId of charIds) {
+        const rels = db.listRelationshipsFrom(worldId, focalId);
+        for (const r of rels) {
+          if (seen.has(r.toId)) continue;
+          if (r.trust < 0.3 && r.affection < 0.3) continue;
+          // Also skip dead listeners — checking aliveness lets us avoid
+          // lighting up corpses with fresh memories.
+          const other = db.getCharacter(worldId, r.toId);
+          if (!other || !other.alive) continue;
+          seen.add(r.toId);
+          // Heavier bond → heavier memory, but always low-weight (this is
+          // hearsay, not lived experience).
+          const w = Math.min(0.18, Math.max(0.06, (r.trust + r.affection) * 0.07 + 0.06));
+          candidates.push({ characterId: r.toId, weight: w });
+          if (candidates.length >= PROPAGATION_CAP) break;
+        }
+        if (candidates.length >= PROPAGATION_CAP) break;
+      }
+      const text = `Word reached me of "${rendered.title}" — ${plan.sketch.slice(0, 240)}`;
+      for (const cand of candidates) {
+        db.insertMemory({
+          id: randomUUID(),
+          worldId,
+          characterId: cand.characterId,
+          weight: cand.weight,
+          text,
+          tickLearned: tickNumber,
+        });
+      }
+      if (candidates.length > 0) {
+        notes.push(`propagated ${candidates.length} hearsay memories`);
+      }
+    }
+
     db.bumpWorldTick(worldId, rendered.inWorldDate);
     db.decayMemories(worldId, 0.985);
   })();
@@ -277,6 +335,12 @@ export async function runTick(db: Db, worldId: WorldId): Promise<TickResult> {
       });
     }
   }
+
+  // Top up missing images for locations and principals/secondaries. Cap
+  // each tick so we don't burn the daily budget in one go: 4 per 15-min
+  // tick = ~16/hour ceiling, and the 50/day budget gate inside the bare
+  // client is the hard backstop.
+  backfillMissingImages(db, startWorld, 4);
 
   const summary =
     `beat=${plan.beatType} applied=${appliedCount} rejected=${rejectedCount} cast=${actions.length}` +

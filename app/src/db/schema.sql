@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS worlds (
   in_world_date TEXT NOT NULL,
   tick          INTEGER NOT NULL DEFAULT 0,
   deep_history  TEXT NOT NULL DEFAULT '{}',
+  world_horizon TEXT NOT NULL DEFAULT '',
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
 );
@@ -25,6 +26,8 @@ CREATE TABLE IF NOT EXISTS locations (
   type        TEXT NOT NULL,
   description TEXT NOT NULL,
   weather     TEXT NOT NULL,
+  coordinates TEXT,                          -- JSON {x,y} over realm map (0..1); null for old worlds
+  region      TEXT NOT NULL DEFAULT '',      -- a regional grouping label
   image_path  TEXT,
   PRIMARY KEY (world_id, id),
   FOREIGN KEY (world_id) REFERENCES worlds(id) ON DELETE CASCADE

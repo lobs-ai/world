@@ -11,7 +11,9 @@
     "genesis": "tsx src/cli/genesis.ts",
     "tick": "tsx src/cli/tick.ts",
     "tick:loop": "tsx src/cli/loop.ts",
-    "dump": "tsx src/cli/dump.ts"
+    "dump": "tsx src/cli/dump.ts",
+    "images": "tsx src/cli/images.ts",
+    "coordinates": "tsx src/cli/coordinates.ts"
   },
   "dependencies": {
     "@agentic/llm": "file:../../agentic/packages/llm",

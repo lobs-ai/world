@@ -29,11 +29,18 @@ export interface Db {
   getWorld(id: WorldId): World | null;
   bumpWorldTick(id: WorldId, newDate: string): number;
   listWorlds(): World[];
+  setWorldRealmImage(id: WorldId, path: string): void;
 
   insertLocation(l: Location): void;
   listLocations(worldId: WorldId): Location[];
   getLocation(worldId: WorldId, id: string): Location | null;
   setLocationImage(worldId: WorldId, id: string, path: string): void;
+  setLocationPlacement(
+    worldId: WorldId,
+    id: string,
+    coordinates: { x: number; y: number },
+    region: string,
+  ): void;
 
   insertCharacter(c: Character): void;
   updateCharacter(c: Character): void;
@@ -100,6 +107,9 @@ function migrate(raw: Database.Database): void {
   // additive migrations for DBs created before the spine/factions/prophecies
   // expansion. New columns get safe defaults so existing rows stay valid.
   ensureColumn(raw, "worlds", "deep_history", "deep_history TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(raw, "worlds", "world_horizon", "world_horizon TEXT NOT NULL DEFAULT ''");
+  ensureColumn(raw, "locations", "coordinates", "coordinates TEXT");
+  ensureColumn(raw, "locations", "region", "region TEXT NOT NULL DEFAULT ''");
   ensureColumn(raw, "characters", "weight", "weight TEXT NOT NULL DEFAULT 'principal'");
   ensureColumn(raw, "characters", "faction_id", "faction_id TEXT");
   ensureColumn(raw, "characters", "secrets", "secrets TEXT NOT NULL DEFAULT '[]'");
@@ -112,6 +122,7 @@ function migrate(raw: Database.Database): void {
   ensureColumn(raw, "characters", "image_path", "image_path TEXT");
   ensureColumn(raw, "locations", "image_path", "image_path TEXT");
   ensureColumn(raw, "chronicle_entries", "image_path", "image_path TEXT");
+  ensureColumn(raw, "worlds", "realm_image_path", "realm_image_path TEXT");
 
   // Indexes on migrated columns must be created after ensureColumn — for an
   // older DB the column doesn't exist yet when schema.sql runs.
@@ -149,8 +160,8 @@ export function openDb(path: string): Db {
 
   // ── worlds ─────────────────────────────────────────────────────────────
   const stmtInsertWorld = raw.prepare(`
-    INSERT INTO worlds (id, name, premise, tone, themes, era, in_world_date, tick, deep_history, created_at, updated_at)
-    VALUES (@id, @name, @premise, @tone, @themes, @era, @inWorldDate, @tick, @deepHistory, @createdAt, @updatedAt)
+    INSERT INTO worlds (id, name, premise, tone, themes, era, in_world_date, tick, deep_history, world_horizon, created_at, updated_at)
+    VALUES (@id, @name, @premise, @tone, @themes, @era, @inWorldDate, @tick, @deepHistory, @worldHorizon, @createdAt, @updatedAt)
   `);
 
   const stmtGetWorld = raw.prepare(`SELECT * FROM worlds WHERE id = ?`);
@@ -160,20 +171,26 @@ export function openDb(path: string): Db {
   const stmtBumpTick = raw.prepare(
     `UPDATE worlds SET tick = tick + 1, in_world_date = ?, updated_at = ? WHERE id = ?`,
   );
+  const stmtSetRealmImage = raw.prepare(
+    `UPDATE worlds SET realm_image_path = ? WHERE id = ?`,
+  );
 
   // ── locations ──────────────────────────────────────────────────────────
   const stmtInsertLocation = raw.prepare(`
-    INSERT INTO locations (id, world_id, name, type, description, weather, image_path)
-    VALUES (@id, @worldId, @name, @type, @description, @weather, @imagePath)
+    INSERT INTO locations (id, world_id, name, type, description, weather, coordinates, region, image_path)
+    VALUES (@id, @worldId, @name, @type, @description, @weather, @coordinates, @region, @imagePath)
   `);
   const stmtListLocations = raw.prepare(
-    `SELECT * FROM locations WHERE world_id = ? ORDER BY name`,
+    `SELECT * FROM locations WHERE world_id = ? ORDER BY region, name`,
   );
   const stmtGetLocation = raw.prepare(
     `SELECT * FROM locations WHERE world_id = ? AND id = ?`,
   );
   const stmtSetLocImage = raw.prepare(
     `UPDATE locations SET image_path = ? WHERE world_id = ? AND id = ?`,
+  );
+  const stmtSetLocPlacement = raw.prepare(
+    `UPDATE locations SET coordinates = ?, region = ? WHERE world_id = ? AND id = ?`,
   );
 
   // ── characters ─────────────────────────────────────────────────────────
@@ -327,6 +344,8 @@ export function openDb(path: string): Db {
     id: string; name: string; premise: string; tone: string;
     themes: string; era: string; in_world_date: string;
     tick: number; deep_history: string;
+    world_horizon: string | null;
+    realm_image_path: string | null;
     created_at: string; updated_at: string;
   };
   const mapWorld = (r: WorldRow): World => ({
@@ -334,17 +353,25 @@ export function openDb(path: string): Db {
     themes: pOr<string[]>(r.themes, []), era: r.era, inWorldDate: r.in_world_date,
     tick: r.tick,
     deepHistory: pOr<DeepHistory>(r.deep_history, EMPTY_DEEP_HISTORY),
+    worldHorizon: r.world_horizon ?? "",
+    realmImagePath: r.realm_image_path ?? undefined,
     createdAt: r.created_at, updatedAt: r.updated_at,
   });
 
   type LocRow = {
     id: string; world_id: string; name: string; type: Location["type"];
     description: string; weather: string;
+    coordinates: string | null;
+    region: string | null;
     image_path: string | null;
   };
   const mapLocation = (r: LocRow): Location => ({
     id: r.id, worldId: r.world_id, name: r.name, type: r.type,
     description: r.description, weather: r.weather,
+    coordinates: r.coordinates
+      ? (pOr<{ x: number; y: number } | null>(r.coordinates, null) ?? undefined)
+      : undefined,
+    region: r.region ?? "",
     imagePath: r.image_path ?? undefined,
   });
 
@@ -492,8 +519,16 @@ export function openDb(path: string): Db {
       const r = stmtGetWorld.get(id) as WorldRow;
       return r.tick;
     },
+    setWorldRealmImage(id, path) {
+      stmtSetRealmImage.run(path, id);
+    },
     insertLocation(l) {
-      stmtInsertLocation.run({ ...l, imagePath: l.imagePath ?? null });
+      stmtInsertLocation.run({
+        ...l,
+        coordinates: l.coordinates ? j(l.coordinates) : null,
+        region: l.region ?? "",
+        imagePath: l.imagePath ?? null,
+      });
     },
     listLocations(worldId) {
       return (stmtListLocations.all(worldId) as LocRow[]).map(mapLocation);
@@ -504,6 +539,9 @@ export function openDb(path: string): Db {
     },
     setLocationImage(worldId, id, path) {
       stmtSetLocImage.run(path, worldId, id);
+    },
+    setLocationPlacement(worldId, id, coordinates, region) {
+      stmtSetLocPlacement.run(j(coordinates), region, worldId, id);
     },
     insertCharacter(c) {
       stmtInsertCharacter.run({

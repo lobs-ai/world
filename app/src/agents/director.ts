@@ -26,6 +26,77 @@ export async function director(db: Db, worldId: WorldId): Promise<DirectorPlanPa
   const secondary = characters.filter((c) => c.weight === "secondary");
   const atmospheric = characters.filter((c) => c.weight === "atmospheric");
 
+  // Cadence telemetry: concrete counters the director can read and act on.
+  // The prompt's rules ("if last 3 entries shared a location, move the
+  // camera"; "1 in 3 entries should be atmospheric-focal") only bite if the
+  // model can see the counters — otherwise it imagines them and gets it
+  // wrong. We compute them here from the recent entries so the prompt has
+  // something to ground against.
+  const RECENT_WINDOW = 6;
+  const cadenceWindow = db.listEntries(worldId, RECENT_WINDOW);
+  const charWeight = new Map(characters.map((c) => [c.id, c.weight]));
+
+  const beatTypeStreak = (() => {
+    if (cadenceWindow.length === 0) return { type: null as string | null, length: 0 };
+    const head = cadenceWindow[0]!.beatType;
+    let n = 0;
+    for (const e of cadenceWindow) {
+      if (e.beatType === head) n++;
+      else break;
+    }
+    return { type: head, length: n };
+  })();
+
+  const recentLocationIds = cadenceWindow
+    .flatMap((e) => e.locationIds)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .slice(0, 6);
+
+  const sameLocationStreak = (() => {
+    if (cadenceWindow.length === 0) return { locationId: null as string | null, length: 0 };
+    const head = cadenceWindow[0]!.locationIds[0];
+    if (!head) return { locationId: null, length: 0 };
+    let n = 0;
+    for (const e of cadenceWindow) {
+      if (e.locationIds[0] === head) n++;
+      else break;
+    }
+    return { locationId: head, length: n };
+  })();
+
+  const ticksSinceWorldReport = (() => {
+    const idx = cadenceWindow.findIndex((e) => e.beatType === "world_report");
+    return idx === -1 ? cadenceWindow.length + 1 : idx;
+  })();
+
+  const ticksSinceAtmosphericFocal = (() => {
+    const idx = cadenceWindow.findIndex((e) =>
+      e.characterIds.some((cid) => charWeight.get(cid) === "atmospheric"),
+    );
+    return idx === -1 ? cadenceWindow.length + 1 : idx;
+  })();
+
+  const ticksSincePrivate = (() => {
+    const idx = cadenceWindow.findIndex((e) => e.beatType === "private");
+    return idx === -1 ? cadenceWindow.length + 1 : idx;
+  })();
+
+  // Per-principal: ticks since they were last focal. The prompt asks the
+  // director to weight back in any principal off-stage 8+ ticks.
+  const principalLastFocal = new Map<string, number>();
+  for (const p of principal) {
+    const idx = cadenceWindow.findIndex((e) => e.characterIds.includes(p.id));
+    principalLastFocal.set(p.id, idx === -1 ? Infinity : idx);
+  }
+  const stalePrincipals = principal
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      ticksSinceFocal: principalLastFocal.get(p.id) ?? Infinity,
+    }))
+    .filter((p) => p.ticksSinceFocal >= RECENT_WINDOW)
+    .map((p) => ({ ...p, ticksSinceFocal: p.ticksSinceFocal === Infinity ? null : p.ticksSinceFocal }));
+
   const ctx = {
     world: {
       name: world.name,
@@ -35,6 +106,9 @@ export async function director(db: Db, worldId: WorldId): Promise<DirectorPlanPa
       themes: world.themes,
       tick: world.tick,
       inWorldDate: world.inWorldDate,
+      // The far horizon the chronicle is bending toward. Director-only.
+      // Empty for older worlds (no horizon set at their genesis).
+      worldHorizon: world.worldHorizon,
     },
     deepHistory: world.deepHistory,
     plots: plots.map((p) => ({
@@ -111,6 +185,17 @@ export async function director(db: Db, worldId: WorldId): Promise<DirectorPlanPa
       locationIds: e.locationIds,
       characterIds: e.characterIds,
     })),
+    // Cadence counters — ground the prompt's cadence rules against actual
+    // recent state, not the model's guess of it.
+    cadence: {
+      beatTypeStreak,            // {type, length} of the last run of same-type beats
+      sameLocationStreak,        // {locationId, length}
+      recentLocationIds,         // distinct locations across last 6 entries (for "move the camera")
+      ticksSinceWorldReport,     // entries since the last world_report
+      ticksSinceAtmosphericFocal,// entries since an atmospheric character was focal
+      ticksSincePrivate,         // entries since the last "private" beat
+      stalePrincipals,           // principals not focal in 6+ entries (or never)
+    },
   };
 
   const plotIds = new Set(plots.map((p) => p.id));
@@ -166,6 +251,12 @@ function validateDirectorPlan(
     }
     if (plan.characterIds.length < 1) {
       issues.push({ path: "characterIds", message: `${plan.beatType} beat requires at least one focal character` });
+    }
+    if (plan.beatType === "private" && plan.characterIds.length > 2) {
+      issues.push({
+        path: "characterIds",
+        message: `private beat is for 1–2 characters; got ${plan.characterIds.length}. trim the cast or pick a different beatType`,
+      });
     }
   }
   if (plan.factionId && !ids.factionIds.has(plan.factionId)) {

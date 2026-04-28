@@ -3,6 +3,10 @@
 //   - subject-specific prompt builders (character / location / scene)
 //   - a "scene image cooldown" so we generate at most ~1 hero image / hour
 //   - fire-and-forget helpers that write back to the DB when ready
+//   - a serial queue so we never fire >1 generation in flight at once
+//     (the API throttles parallel calls and the budget check isn't atomic
+//     across overlapping requests). Genesis enqueues 20+ jobs at once;
+//     they now run one after the other instead of stampeding.
 //
 // Failures are non-fatal everywhere — the UI falls back to placeholders.
 // Callers never await image generation on the critical path of a tick.
@@ -70,6 +74,27 @@ export function locationPrompt(l: Location, world: World): string {
   return withStyle(subject, styleFor(world));
 }
 
+export function realmPrompt(world: World, locations: Location[]): string {
+  // The realm map gets its own register — parchment, not painting. We let
+  // the model invent the geography that fits the place names; it tends to
+  // do beautifully here. Skip the painterly suffix; substitute a map suffix.
+  const places = locations
+    .slice(0, 14)
+    .map((l) => `${l.name} (${l.type})`)
+    .join("; ");
+  return [
+    `An old illustrated map of ${world.name}, painted on aged parchment.`,
+    `${world.era}.`,
+    `Place names labeled in elegant calligraphy: ${places}.`,
+    `River systems, coastlines, mountain ridges, forests indicated by hand-drawn`,
+    `symbology in the medieval cartographic tradition. Compass rose in one corner.`,
+    `Decorative cartouche with the realm's name. Sea-monster or mythic creature`,
+    `at the map's edge. Sepia and muted ochre palette, ink lines, watercolor wash.`,
+    `Top-down view, no people, no modern objects, no anachronism.`,
+    `Style: 17th-century atlas plate; the work of an old-world cartographer.`,
+  ].join(" ");
+}
+
 export function scenePrompt(
   sketch: string,
   entry: { title: string; weather?: string },
@@ -135,6 +160,19 @@ export function imageForCharacter(
   });
 }
 
+export function imageForRealm(db: Db, world: World): void {
+  if (world.realmImagePath) return;
+  const locations = db.listLocations(world.id);
+  if (locations.length === 0) return;
+  void runAndStore({
+    label: `realm:${world.id}`,
+    subjectKey: `realm:${world.id}`,
+    prompt: realmPrompt(world, locations),
+    aspectRatio: "16:9",
+    onSuccess: (relPath) => db.setWorldRealmImage(world.id, relPath),
+  });
+}
+
 export function imageForLocation(
   db: Db,
   world: World,
@@ -185,19 +223,130 @@ interface RunArgs {
   onSuccess: (relPath: string) => void;
 }
 
-async function runAndStore(args: RunArgs): Promise<void> {
-  try {
-    const out = await generateImage(
-      {
-        subjectKey: args.subjectKey,
-        prompt: args.prompt,
-        aspectRatio: args.aspectRatio,
-      },
-      { dailyBudget: DAILY_BUDGET },
-    );
-    if (!out) return;
-    args.onSuccess(out.path);
-  } catch (err) {
-    console.error(`[image] ${args.label} failed:`, (err as Error).message);
+// Serial queue. Each new job chains onto the tail. Errors are swallowed at
+// the chain level so one failure doesn't poison the rest.
+let queueTail: Promise<void> = Promise.resolve();
+let queueDepth = 0;
+
+function enqueue(fn: () => Promise<void>): void {
+  queueDepth++;
+  queueTail = queueTail.then(async () => {
+    try {
+      await fn();
+    } finally {
+      queueDepth--;
+    }
+  });
+}
+
+export function pendingImageJobs(): number {
+  return queueDepth;
+}
+
+// Awaitable form — used by tools that want to wait for the queue to drain
+// (e.g. the backfill CLI). Day-to-day code uses fire-and-forget.
+export async function drainImageQueue(): Promise<void> {
+  await queueTail;
+}
+
+// Transient API failures ("fetch failed", 5xx) are common at this scale.
+// We retry up to N times with exponential backoff before giving up. Budget
+// still only ticks on a successful save inside the bare client.
+const MAX_RETRIES = 3;
+
+function runAndStore(args: RunArgs): void {
+  enqueue(async () => {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const out = await generateImage(
+          {
+            subjectKey: args.subjectKey,
+            prompt: args.prompt,
+            aspectRatio: args.aspectRatio,
+          },
+          { dailyBudget: DAILY_BUDGET },
+        );
+        if (!out) return; // budget exhausted — caller already logged
+        args.onSuccess(out.path);
+        return;
+      } catch (err) {
+        const msg = (err as Error).message;
+        if (attempt === MAX_RETRIES) {
+          console.error(
+            `[image] ${args.label} failed after ${MAX_RETRIES} tries: ${msg}`,
+          );
+          return;
+        }
+        const wait = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s
+        console.error(
+          `[image] ${args.label} attempt ${attempt} failed (${msg}); retrying in ${wait}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+    }
+  });
+}
+
+// Walk the world and enqueue images for everything important that doesn't
+// have one yet. Caller controls the cap so a tick doesn't burn through the
+// daily budget in one go. Order matters: locations are scarcer and a more
+// reliable visual win, so they fill before atmospherics.
+export interface BackfillResult {
+  enqueuedLocations: number;
+  enqueuedCharacters: number;
+  remainingLocations: number;
+  remainingCharacters: number;
+}
+
+export function backfillMissingImages(
+  db: Db,
+  world: World,
+  limit: number,
+): BackfillResult {
+  const out: BackfillResult = {
+    enqueuedLocations: 0,
+    enqueuedCharacters: 0,
+    remainingLocations: 0,
+    remainingCharacters: 0,
+  };
+  let budget = limit;
+
+  // The realm map first — single biggest visual upgrade per image spent.
+  if (!world.realmImagePath && budget > 0) {
+    imageForRealm(db, world);
+    budget--;
   }
+
+  // Locations next.
+  const locations = db.listLocations(world.id);
+  const missingLocs = locations.filter((l) => !l.imagePath);
+  for (const l of missingLocs) {
+    if (budget <= 0) {
+      out.remainingLocations++;
+      continue;
+    }
+    imageForLocation(db, world, l.id);
+    out.enqueuedLocations++;
+    budget--;
+  }
+
+  // Then characters — principals and secondaries are the priority.
+  // Atmospherics get covered when there's spare budget.
+  const chars = db.listCharacters(world.id);
+  const ordered = [
+    ...chars.filter((c) => c.weight === "principal" && !c.imagePath),
+    ...chars.filter((c) => c.weight === "secondary" && !c.imagePath),
+    ...chars.filter((c) => c.weight === "atmospheric" && !c.imagePath),
+  ];
+  for (const c of ordered) {
+    if (budget <= 0) {
+      out.remainingCharacters++;
+      continue;
+    }
+    imageForCharacter(db, world, c.id);
+    out.enqueuedCharacters++;
+    budget--;
+  }
+
+  return out;
 }

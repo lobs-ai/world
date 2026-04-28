@@ -23,14 +23,8 @@ export default function LandingPage() {
 
         <Fleuron />
 
-        <div style={{ marginTop: 12, padding: "20px 0", borderTop: "0.5px solid var(--rule)", borderBottom: "0.5px solid var(--rule)" }}>
-          <p style={{ fontStyle: "italic", color: "var(--ink-soft)", margin: 0, textAlign: "center" }}>
-            New worlds are seeded from the command line — see <span className="mono" style={{ fontSize: 14 }}>npm run genesis &quot;…&quot;</span>.
-          </p>
-        </div>
-
         <div style={{ marginTop: 80 }}>
-          <SectionHead kicker="other worlds, lately">Worlds running, this hour</SectionHead>
+          <SectionHead kicker="open chronicles">Worlds in progress</SectionHead>
           {worlds.length === 0 ? (
             <p style={{ fontStyle: "italic", color: "var(--ink-faint)", textAlign: "center", padding: "32px 0" }}>
               None yet. The cartographer&rsquo;s desk is bare.
@@ -50,7 +44,7 @@ export default function LandingPage() {
                 >
                   <div className="display" style={{ fontSize: 24, fontStyle: "italic", marginBottom: 4 }}>{w.name}</div>
                   <div className="mono" style={{ fontSize: 10.5, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ink-faint)", marginBottom: 12 }}>
-                    {w.tone} · day {w.tick} · {w.themes.slice(0, 2).join(" · ")}
+                    {[w.tone, ...w.themes.slice(0, 2)].filter(Boolean).join(" · ")}
                   </div>
                   <p style={{ fontStyle: "italic", color: "var(--ink-soft)", margin: 0 }}>{w.premise}</p>
                 </Link>

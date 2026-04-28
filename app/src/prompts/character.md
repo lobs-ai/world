@@ -88,8 +88,17 @@ but every speaker should be **easy to read out loud** on the first try.
 
 ### Reaching outward — small marks on the world
 
-- `rumor_planted` — only if your scene actually plants a rumour at a
-  specific place. `truth` 0..1.
+- `rumor_planted` — when something said or done in your scene would be
+  *overheard* by the wider place. Public rooms — inns, markets,
+  crossroads, courtyards, gates, abbey naves, ramparts at change of
+  watch — are leaky. If the location's character implies witnesses
+  (servants, regulars, sentries, pilgrims), and your scene has a line
+  worth repeating, plant the rumour. Set `truth` to 0..1: 1.0 if it's
+  exactly what was said; 0.4–0.7 if it's a garbled second-hand version.
+  The rumour text reads like gossip, not biography — "they say a grey
+  rider asked after the king's healers at the Bell & Buckle three nights
+  past," not "Ser Edric of Torren visited the inn." Rumours are how the
+  world *learns*; without them off-stage characters never react.
 - `prophecy_echoed` — only if your action obliquely touched a prophecy
   whose id you were given. Don't name the prophecy in `saysOrDoes`;
   characters don't know they're inside one.

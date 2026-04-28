@@ -19,38 +19,44 @@ export function SectionHead({
   );
 }
 
+// Placeholder shown before a character's portrait has been generated. We
+// don't render the AI prompt text — that's a system artifact. Instead we
+// show the character's initials in serif italic on textured paper.
 export function Portrait({
-  label,
+  name,
   w = 60,
   h = 75,
 }: {
-  label: string;
+  name?: string;
   w?: number;
   h?: number;
 }) {
+  const initials = (name ?? "")
+    .split(/\s+/)
+    .filter((part) => /^[A-Za-z]/.test(part))
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
   return (
     <div
+      aria-hidden
       style={{
         width: w,
         height: h,
-        background: "var(--paper-deep)",
-        border: "0.5px solid rgba(0,0,0,0.18)",
-        backgroundImage:
-          "repeating-linear-gradient(45deg, transparent 0 8px, rgba(0,0,0,0.05) 8px 9px)",
+        background:
+          "radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.6), transparent 60%), var(--paper-deep)",
+        border: "0.5px solid rgba(0,0,0,0.16)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        textAlign: "center",
-        padding: 4,
-        fontFamily: "var(--mono)",
-        fontSize: 10,
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
+        fontFamily: "var(--display)",
+        fontStyle: "italic",
+        fontSize: Math.max(14, Math.round(h * 0.28)),
         color: "var(--ink-faint)",
+        letterSpacing: "0.04em",
       }}
-      title={label}
     >
-      {label.split(" ").slice(0, 4).join(" ")}
+      {initials || ""}
     </div>
   );
 }

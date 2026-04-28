@@ -45,6 +45,15 @@ export interface World {
   inWorldDate: string;  // current rendered date
   tick: number;
   deepHistory: DeepHistory;
+  // The far-horizon end-state the chronicle is bending toward, written at
+  // genesis. One or two sentences in chronicler's voice — the WoT "Tarmon
+  // Gai'don" line. Director sees it every tick; scribe never does. Plots
+  // come and go but the horizon is the spine of spines: which way the
+  // weight of the chronicle tilts. Empty string for older worlds.
+  worldHorizon: string;
+  // A painted "old cartographer's parchment" of the realm, generated once at
+  // genesis. Renders as the hero on the Map / The Realm page.
+  realmImagePath?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -123,6 +132,15 @@ export interface Rumor {
   tickPlanted: number;
 }
 
+// Normalized coordinates over the realm parchment (the painted hero image
+// at world.realmImagePath). Origin is top-left: x grows west→east, y grows
+// north→south. Both 0..1 so any rendered map size works. Optional — older
+// worlds were seeded without coordinates and render in a fallback grid.
+export interface Coordinates {
+  x: number;
+  y: number;
+}
+
 export interface Location {
   id: LocationId;
   worldId: WorldId;
@@ -130,6 +148,13 @@ export interface Location {
   type: string;          // free-form short noun: "capital", "inn", "abbey", "marsh-shrine"
   description: string;
   weather: string;
+  // Where this place sits on the realm map. May be undefined for old worlds;
+  // the Atlas page falls back to a gazetteer grid for those.
+  coordinates?: Coordinates;
+  // A human-named region grouping ("the northern marches", "the marsh", "the
+  // capital and its skirts"). Used to group the gazetteer and to label the
+  // map's regional bands. Empty for older worlds.
+  region: string;
   imagePath?: string;
 }
 
@@ -187,7 +212,8 @@ export type BeatType =
   | "climax"
   | "falling"
   | "resolution"
-  | "world_report";          // no scene cast; chronicler's-aside paragraph
+  | "world_report"           // no scene cast; chronicler's-aside paragraph
+  | "private";               // 1–2 characters; quiet, intimate, often aftermath
 
 export interface PlotBeat {
   tick: number;

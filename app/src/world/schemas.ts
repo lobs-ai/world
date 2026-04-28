@@ -132,12 +132,21 @@ const characterSeedSchema = z.object({
 // the LLM emits whatever fits the place: "capital", "inn", "marsh-shrine",
 // "crossroads", "abbey", "seat of a great house". The UI renders it as a
 // label ("a {type} of the realm") and no code path branches on the value.
+const coordinatesSchema = z.object({
+  x: softNum(0, 1),
+  y: softNum(0, 1),
+});
+
 const locationSeedSchema = z.object({
   id,
   name: softStr(200, { min: 1 }),
   type: softStr(160, { min: 1 }),
   description: softStr(3000, { min: 1 }),
   weather: softStrDef(600),
+  // Required for new worlds — the Atlas needs them to place markers. Old
+  // worlds won't have them; the backfill CLI fills them in.
+  coordinates: coordinatesSchema,
+  region: softStr(200, { min: 1 }),
 });
 
 const beatTypeSchema = z.enum([
@@ -148,6 +157,11 @@ const beatTypeSchema = z.enum([
   "falling",
   "resolution",
   "world_report",
+  // A quiet two-character beat. Camp-style: aftermath, intimacy, confession,
+  // rest. Often comes after a `climax` or rising-tension run. The director
+  // picks 1–2 focal characters; the scene rarely advances a plot, but it
+  // shifts mood and relationships and earns the next loud beat.
+  "private",
 ]);
 
 const plotTierSchema = z.enum(["spine", "subplot", "ambient"]);
@@ -249,6 +263,9 @@ export const genesisFrameSchema = z.object({
     themes: z.array(softStr(200)).min(1).max(8),
     era: softStr(800, { min: 1 }),
     inWorldDate: softStr(800, { min: 1 }),
+    // The chronicle's far horizon — where the whole thing is bending. Two
+    // sentences max. The director sees it every tick and steers toward it.
+    worldHorizon: softStr(2400, { min: 8 }),
   }),
   deepHistory: deepHistorySchema,
   locations: z.array(locationSeedSchema).min(8).max(24),

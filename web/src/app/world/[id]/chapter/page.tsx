@@ -12,19 +12,19 @@ export default function ChapterPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="paper" style={{ minHeight: "100vh" }}>
-      <Nav worldId={world.id} worldName={world.name} active="chapter" />
+      <Nav worldId={world.id} worldName={world.name} />
 
       <div style={{ position: "relative", zIndex: 1, padding: "100px 64px 160px", maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 60 }}>
           <div className="display-sc" style={{ fontSize: 13, color: "var(--ink-faint)", letterSpacing: "0.4em", marginBottom: 22 }}>
-            chapter the {Math.max(1, Math.floor(world.tick / 7))}
+            ❧&nbsp;&nbsp;the latest chapter&nbsp;&nbsp;❧
           </div>
           <h1 className="display" style={{ fontSize: 76, fontStyle: "italic", lineHeight: 0.98, marginBottom: 16 }}>
             Of the seven last writs
           </h1>
           <Fleuron glyph="✦   ❦   ✦" />
           <div className="mono" style={{ fontSize: 11, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--ink-faint)" }}>
-            covering the most recent week of the chronicle
+            recently set down
           </div>
         </div>
 

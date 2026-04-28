@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { Fleuron, Portrait, SectionHead } from "@/components/Primitives";
 import { Nav } from "@/components/Nav";
-import { ChronicleImage } from "@/components/ChronicleImage";
+import { ChronicleImage, imageUrlFromPath } from "@/components/ChronicleImage";
 
 export const dynamic = "force-dynamic";
 
@@ -57,31 +57,50 @@ export default function LocationPage({
             <SectionHead kicker="those presently here">Within the walls</SectionHead>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {residents.length ? (
-                residents.map((r) => (
-                  <Link
-                    key={r.id}
-                    href={`/world/${world.id}/character/${r.id}`}
-                    className="row-link"
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "60px 1fr",
-                      gap: 16,
-                      padding: "12px 0",
-                      borderTop: "0.5px solid var(--rule)",
-                      textDecoration: "none",
-                      color: "inherit",
-                    }}
-                  >
-                    <Portrait label="" w={60} h={75} />
-                    <div>
-                      <div className="display" style={{ fontSize: 22, fontStyle: "italic" }}>{r.name}</div>
-                      <div style={{ fontSize: 14, color: "var(--ink-faint)", fontStyle: "italic", marginBottom: 4 }}>
-                        {r.epithet}
+                residents.map((r) => {
+                  const url = imageUrlFromPath(r.imagePath);
+                  return (
+                    <Link
+                      key={r.id}
+                      href={`/world/${world.id}/character/${r.id}`}
+                      className="row-link"
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "60px 1fr",
+                        gap: 16,
+                        padding: "12px 0",
+                        borderTop: "0.5px solid var(--rule)",
+                        textDecoration: "none",
+                        color: "inherit",
+                      }}
+                    >
+                      {url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={url}
+                          alt={r.name}
+                          style={{
+                            width: 60,
+                            height: 75,
+                            objectFit: "cover",
+                            border: "0.5px solid rgba(0,0,0,0.16)",
+                            background: "var(--paper-deep)",
+                            display: "block",
+                          }}
+                        />
+                      ) : (
+                        <Portrait name={r.name} w={60} h={75} />
+                      )}
+                      <div>
+                        <div className="display" style={{ fontSize: 22, fontStyle: "italic" }}>{r.name}</div>
+                        <div style={{ fontSize: 14, color: "var(--ink-faint)", fontStyle: "italic", marginBottom: 4 }}>
+                          {r.epithet}
+                        </div>
+                        <p style={{ fontSize: 14, color: "var(--ink-soft)", margin: 0 }}>{r.summary}</p>
                       </div>
-                      <p style={{ fontSize: 14, color: "var(--ink-soft)", margin: 0 }}>{r.summary}</p>
-                    </div>
-                  </Link>
-                ))
+                    </Link>
+                  );
+                })
               ) : (
                 <p style={{ fontStyle: "italic", color: "var(--ink-faint)" }}>None at present. Only the bees.</p>
               )}

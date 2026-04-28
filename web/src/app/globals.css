@@ -220,6 +220,52 @@ a { color: inherit; text-decoration: none; }
 
 ::selection { background: rgba(120,40,30,0.18); color: var(--ink); }
 
+/* Atlas markers — small inked dots on the painted realm parchment. The
+   active state pulses faintly so the reader's eye finds where the camera
+   has lately been. The label hides until the marker is hovered. */
+.map-marker {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  z-index: 2;
+}
+.map-marker .marker-dot {
+  position: absolute;
+  inset: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 1.5px solid var(--paper);
+  box-shadow: 0 0 0 0.5px var(--ink-soft), 0 1px 3px rgba(40,20,5,0.45);
+  transition: transform 120ms, background 120ms;
+}
+.map-marker .marker-dot.is-active {
+  background: var(--accent-deep);
+  box-shadow:
+    0 0 0 0.5px var(--accent-deep),
+    0 0 0 6px rgba(120,40,30,0.18),
+    0 1px 4px rgba(40,20,5,0.50);
+  animation: marker-pulse 3.2s ease-in-out infinite;
+}
+@keyframes marker-pulse {
+  0%, 100% { box-shadow: 0 0 0 0.5px var(--accent-deep), 0 0 0 6px rgba(120,40,30,0.16), 0 1px 4px rgba(40,20,5,0.50); }
+  50%      { box-shadow: 0 0 0 0.5px var(--accent-deep), 0 0 0 12px rgba(120,40,30,0.0),  0 1px 4px rgba(40,20,5,0.50); }
+}
+.map-marker .marker-label {
+  opacity: 0.85;
+  transition: opacity 120ms, color 120ms, transform 120ms;
+  text-transform: uppercase;
+}
+.map-marker:hover .marker-dot {
+  transform: scale(1.25);
+  background: var(--accent-deep);
+}
+.map-marker:hover .marker-label {
+  opacity: 1;
+  color: var(--accent-deep);
+}
+
 @media (max-width: 1100px) {
   .page { padding: 48px 32px 96px; }
   .marginalia { display: none; }
