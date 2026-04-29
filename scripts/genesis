@@ -1,35 +1,47 @@
 #!/usr/bin/env bash
-# Seed a new world from a one-sentence premise.
+# Seed a new world from a premise.
 #
 # Usage:
 #   ./scripts/genesis "A kingdom where the king has been dying for forty years."
-#   ./scripts/genesis                   # prompts for premise
+#   ./scripts/genesis -f path/to/premise.txt    # read premise from a file
+#   ./scripts/genesis path/to/premise.txt       # auto-detected as a file
+#   ./scripts/genesis                            # prompts (text or a path)
+#
+# Runs inside the world:latest container. Reads the premise on the host so
+# the file doesn't need to be inside a mounted volume.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/_lib.sh"
 
-require_node
+require_docker
 require_minimax_key
-ensure_install
-ensure_app_built
+ensure_image_built
 
-premise="${*:-}"
+if ! parse_premise_args "$@"; then
+  err "$PREMISE_ERROR"
+  exit 2
+fi
+premise="$PREMISE"
+
 if [[ -z "$premise" ]]; then
-  printf "%s " "$(color_blue "premise>")"
+  printf "%s " "$(color_blue "premise> (text or path to a file)")"
   read -r premise
+  if [[ -n "$premise" && -f "$premise" ]]; then
+    premise="$(cat "$premise")"
+  fi
 fi
 if [[ -z "$premise" ]]; then
   err "no premise given"
   exit 2
 fi
 
-step "seeding a world from: $(color_dim "$premise")"
+step "seeding a world from: $(color_dim "${premise:0:80}$([[ ${#premise} -gt 80 ]] && echo …)")"
 echo "  (one LLM call; takes ~20–40 seconds)"
-npm run --silent --workspace=app genesis -- "$premise"
+run_app_oneshot npm run --silent --workspace=app genesis -- "$premise"
 ok "world seeded"
 echo
 echo "Next:"
-echo "  ./scripts/tick      # produce the first chronicle entry"
-echo "  ./scripts/web       # open the site"
+echo "  ./scripts/up        # start web + tick loop in the background"
+echo "  ./scripts/web       # open http://localhost:8534"

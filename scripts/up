@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Start everything in the background: web (port 8534) and the tick loop.
+# Pass a worldId to bind the tick loop to that world; otherwise it auto-
+# picks if there is exactly one world.
+#
+# Usage:
+#   ./scripts/up                # auto-pick or prompt for worldId
+#   ./scripts/up <worldId>
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+require_docker
+require_minimax_key
+ensure_image_built
+
+worldId="$(resolve_world_id "${1:-}")"
+upsert_env WORLD_ID "$worldId"
+
+step "starting web + tick (worldId=$(color_dim "$worldId"))"
+"${COMPOSE[@]}" up -d
+ok "running"
+echo
+echo "  chronicle  $(color_blue "http://localhost:8534/world/$worldId")"
+echo "  logs       ./scripts/logs"
+echo "  stop       ./scripts/down"

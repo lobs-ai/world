@@ -1,20 +1,21 @@
 import { genesis } from "../genesis/index.js";
 import { getConfig } from "../config.js";
 import { openDb } from "../db/index.js";
+import { parsePremiseArgs } from "./parse-premise.js";
 
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const fresh = args.includes("--fresh");
-  const positional = args.filter((a) => !a.startsWith("--"));
-  const premiseFlagIdx = args.indexOf("--premise");
-  let premise: string | null = null;
-  if (premiseFlagIdx >= 0) {
-    premise = args[premiseFlagIdx + 1] ?? null;
-  } else if (positional.length === 1) {
-    premise = positional[0] ?? null;
+  const result = parsePremiseArgs(process.argv.slice(2));
+  if (result.kind === "error") {
+    console.error(`genesis: ${result.message}`);
+    process.exit(2);
   }
+  if (result.kind === "empty") {
+    console.error('usage: genesis "<premise>" | -f <path> [--fresh]');
+    process.exit(2);
+  }
+  const { premise, fresh } = result;
   if (!premise) {
-    console.error('usage: genesis "<one-sentence premise>" [--fresh]');
+    console.error('usage: genesis "<premise>" | -f <path> [--fresh]');
     process.exit(2);
   }
   if (!process.env.MINIMAX_API_KEY) {

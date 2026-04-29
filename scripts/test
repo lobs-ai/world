@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Run every test we have (no Docker required for the bulk of them).
+#   - bash unit tests under tests/bash/
+#   - TypeScript unit tests under app/src/cli/*.test.ts via `node --test`
+#
+# Usage: ./scripts/test          # run everything
+#        ./scripts/test bash     # only the bash tests
+#        ./scripts/test ts       # only the TS tests
+
+set -uo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT"
+
+color_red()   { printf "\033[31m%s\033[0m" "$1"; }
+color_green() { printf "\033[32m%s\033[0m" "$1"; }
+color_blue()  { printf "\033[34m%s\033[0m" "$1"; }
+
+want="${1:-all}"
+overall_rc=0
+
+if [[ "$want" == "all" || "$want" == "bash" ]]; then
+  printf "%s\n" "$(color_blue "── bash tests ──")"
+  for t in tests/bash/test_*.sh; do
+    [[ -f "$t" ]] || continue
+    printf "\n%s\n" "$t"
+    if ! bash "$t"; then
+      overall_rc=1
+    fi
+  done
+fi
+
+if [[ "$want" == "all" || "$want" == "ts" ]]; then
+  printf "\n%s\n" "$(color_blue "── ts tests ──")"
+  if (cd app && npx --no-install tsx --test 'src/**/*.test.ts'); then
+    :
+  else
+    overall_rc=1
+  fi
+fi
+
+echo
+if (( overall_rc == 0 )); then
+  printf "%s all tests passed\n" "$(color_green "✓")"
+else
+  printf "%s tests failed\n" "$(color_red "✗")"
+fi
+exit "$overall_rc"

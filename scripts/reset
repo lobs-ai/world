@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # Wipe the local database. Asks for confirmation. Does not touch .env or code.
+# Operates on host files in ./data/, since the db is bind-mounted from there.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/_lib.sh"
 
-DB="$ROOT/${WORLD_DB:-data/world.db}"
-load_env
-DB="$ROOT/${WORLD_DB:-data/world.db}"
+# Read WORLD_DB from .env if present (host-relative). The container sees
+# /repo/world/data/world.db, but on the host that's just data/world.db.
+if [[ -f "$ROOT/.env" ]]; then
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+fi
+DB="$ROOT/data/world.db"
 
 if [[ ! -f "$DB" ]]; then
   ok "no database at $DB — nothing to reset"
@@ -22,6 +27,13 @@ read -r answer
 if [[ "$answer" != "delete" ]]; then
   err "cancelled"
   exit 1
+fi
+
+# If containers are running and holding the file, stop them first so SQLite
+# releases its locks cleanly.
+if docker ps --format '{{.Names}}' | grep -qE '^world-(web|tick)$'; then
+  step "stopping containers before wipe"
+  "${COMPOSE[@]}" down
 fi
 
 rm -f "$DB" "$DB-wal" "$DB-shm" "$DB-journal"

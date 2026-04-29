@@ -15,7 +15,7 @@
 // commit to the DB, the cache is cleared.
 
 import { randomUUID } from "node:crypto";
-import { callGenesis } from "../llm/client.js";
+import { callGenesis, extractJson } from "../llm/client.js";
 import { loadPrompt } from "../prompts/loader.js";
 import {
   genesisAtmosphericsSchema,
@@ -29,8 +29,10 @@ import type { Db } from "../db/index.js";
 import type { World } from "../world/types.js";
 import { openStageCache, runIdFor, type StageCache } from "./cache.js";
 import {
+  buildFragmentRepairPrompt,
   buildRepairPrompt,
   parseAndRepair,
+  type FragmentRepair,
   type RepairIssue,
 } from "../llm/repair.js";
 import {
@@ -116,6 +118,11 @@ interface StageRunArgs<S extends ZodTypeAny> {
   schema: S;
   label: string;
   buildPrompt: () => { system: string; user: string };
+  // Per-fragment context provider. Given the working raw root and the
+  // fragment path, return a short text blob describing only what the model
+  // needs to fix that fragment — id lists, premise hints, etc. We never
+  // re-feed the whole JSON.
+  buildFragmentContext: (rawRoot: unknown, path: string) => string;
   extraIssues?: (parsed: ZInfer<S>) => RepairIssue[];
   log: (msg: string) => void;
 }
@@ -141,18 +148,35 @@ async function runStage<S extends ZodTypeAny>(
     initialRaw,
     extraIssues: args.extraIssues,
     maxAttempts: REPAIR_ATTEMPTS,
-    onAttempt: (attempt, issues, accepted) => {
+    onAttempt: (attempt, issues, accepted, mode) => {
       if (accepted) {
         if (attempt > 1) {
           args.log(`        ✓ repaired on attempt ${attempt}/${REPAIR_ATTEMPTS}`);
         }
         return;
       }
-      if (attempt < REPAIR_ATTEMPTS) {
-        args.log(
-          `        ✗ attempt ${attempt}/${REPAIR_ATTEMPTS}: ${issues.length} issue${issues.length === 1 ? "" : "s"} — re-prompting`,
-        );
-      }
+      if (mode === null || attempt >= REPAIR_ATTEMPTS) return;
+      const tag = mode === "fragment" ? "targeted" : "full re-emit";
+      args.log(
+        `        ✗ attempt ${attempt}/${REPAIR_ATTEMPTS}: ${issues.length} issue${issues.length === 1 ? "" : "s"} — repairing (${tag})`,
+      );
+    },
+    repairFragment: async (frag: FragmentRepair) => {
+      const context = args.buildFragmentContext(frag.rawRoot, frag.path);
+      const userMsg = buildFragmentRepairPrompt({
+        path: frag.path,
+        value: frag.value,
+        issues: frag.issues,
+        context,
+      });
+      const raw = await callGenesis({
+        system: FRAGMENT_REPAIR_SYSTEM,
+        user: userMsg,
+        // Fragment outputs are tiny — one character, one plot, etc.
+        // Cap aggressively so retries are cheap.
+        maxTokens: 4096,
+      });
+      return extractJson(raw);
     },
     repair: async (previousRaw, issues) => {
       const repairUser = buildRepairPrompt(previousRaw, issues);
@@ -166,6 +190,134 @@ async function runStage<S extends ZodTypeAny>(
 
   args.cache.write(args.stageName, parsed);
   return parsed;
+}
+
+const FRAGMENT_REPAIR_SYSTEM =
+  "You are a JSON repair assistant for a worldbuilding pipeline. " +
+  "You will be given a single fragment (one character, plot, faction, prophecy, etc.) " +
+  "from a larger world, plus a short text description of the surrounding constraints " +
+  "(valid ids, etc.) and a list of validation issues. Return ONLY a single fenced " +
+  "JSON block containing a corrected version of THAT fragment — same shape as the " +
+  "input value. Keep every field that was not flagged. Fix only the listed issues. " +
+  "Never invent ids that are not in the provided id lists. Never return the " +
+  "surrounding world or extra commentary.";
+
+// ── Fragment context builders ───────────────────────────────────────────────
+
+// Pull bare id/name lists out of a partially-validated raw object. Used to
+// describe the surrounding constraints to a fragment-repair call without
+// re-feeding the whole world JSON.
+function rawNamedItems(
+  raw: unknown,
+  key: string,
+): { id: string; name?: string; type?: string }[] {
+  if (!raw || typeof raw !== "object") return [];
+  const arr = (raw as Record<string, unknown>)[key];
+  if (!Array.isArray(arr)) return [];
+  const out: { id: string; name?: string; type?: string }[] = [];
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.id !== "string") continue;
+    out.push({
+      id: rec.id,
+      name: typeof rec.name === "string" ? rec.name : undefined,
+      type: typeof rec.type === "string" ? rec.type : undefined,
+    });
+  }
+  return out;
+}
+
+function fmtIdList(items: { id: string; name?: string; type?: string }[]): string {
+  if (items.length === 0) return "(none)";
+  return items
+    .map((i) => {
+      const tail = i.name ? ` — ${i.name}${i.type ? ` (${i.type})` : ""}` : "";
+      return `  - ${i.id}${tail}`;
+    })
+    .join("\n");
+}
+
+function premiseLine(opts: GenesisOptions): string {
+  const p = opts.premise.trim();
+  return p.length > 600 ? `${p.slice(0, 600).replace(/\s+$/, "")}…` : p;
+}
+
+function frameFragmentContext(opts: GenesisOptions, rawRoot: unknown): string {
+  const locs = rawNamedItems(rawRoot, "locations");
+  const facs = rawNamedItems(rawRoot, "factions");
+  const chars = rawNamedItems(rawRoot, "characters");
+  const plots = rawNamedItems(rawRoot, "plots");
+  return [
+    `Premise: ${premiseLine(opts)}`,
+    ``,
+    `Valid location ids:`,
+    fmtIdList(locs),
+    ``,
+    `Valid faction ids:`,
+    fmtIdList(facs),
+    ``,
+    `Valid character ids (principals):`,
+    fmtIdList(chars),
+    ``,
+    `Valid plot ids:`,
+    fmtIdList(plots),
+  ].join("\n");
+}
+
+function secondariesFragmentContext(
+  opts: GenesisOptions,
+  frame: GenesisFrame,
+  rawRoot: unknown,
+): string {
+  const newChars = rawNamedItems(rawRoot, "characters");
+  return [
+    `Premise: ${premiseLine(opts)}`,
+    `World: ${frame.world.name} — ${frame.world.tone}`,
+    ``,
+    `Valid location ids:`,
+    fmtIdList(frame.locations.map((l) => ({ id: l.id, name: l.name, type: l.type }))),
+    ``,
+    `Valid faction ids:`,
+    fmtIdList(frame.factions.map((f) => ({ id: f.id, name: f.name }))),
+    ``,
+    `Already-defined character ids (do not duplicate):`,
+    fmtIdList([
+      ...frame.characters.map((c) => ({ id: c.id, name: c.name })),
+      ...newChars.map((c) => ({ id: c.id, name: c.name })),
+    ]),
+    ``,
+    `Required: every secondary character must have weight = "secondary".`,
+  ].join("\n");
+}
+
+function atmosphericsFragmentContext(
+  opts: GenesisOptions,
+  frame: GenesisFrame,
+  secondaries: GenesisSecondaries,
+  rawRoot: unknown,
+): string {
+  const newChars = rawNamedItems(rawRoot, "characters");
+  const existingIds = [
+    ...frame.characters.map((c) => ({ id: c.id, name: c.name })),
+    ...secondaries.characters.map((c) => ({ id: c.id, name: c.name })),
+    ...newChars.map((c) => ({ id: c.id, name: c.name })),
+  ];
+  return [
+    `Premise: ${premiseLine(opts)}`,
+    `World: ${frame.world.name} — ${frame.world.tone}`,
+    ``,
+    `Valid location ids:`,
+    fmtIdList(frame.locations.map((l) => ({ id: l.id, name: l.name, type: l.type }))),
+    ``,
+    `Valid faction ids:`,
+    fmtIdList(frame.factions.map((f) => ({ id: f.id, name: f.name }))),
+    ``,
+    `Already-defined character ids (do not duplicate):`,
+    fmtIdList(existingIds),
+    ``,
+    `Required: every atmospheric character must have weight = "atmospheric".`,
+  ].join("\n");
 }
 
 // ── Stage prompt builders ───────────────────────────────────────────────────
@@ -241,6 +393,7 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
     schema: genesisFrameSchema,
     label: "Genesis frame",
     buildPrompt: () => framePrompt(opts),
+    buildFragmentContext: (rawRoot) => frameFragmentContext(opts, rawRoot),
     extraIssues: (f) => frameIssues(f),
     log,
   });
@@ -266,6 +419,8 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
       schema: genesisSecondariesSchema,
       label: "Genesis secondaries",
       buildPrompt: () => secondariesPrompt(opts, frame),
+      buildFragmentContext: (rawRoot) =>
+        secondariesFragmentContext(opts, frame, rawRoot),
       extraIssues: (s) => stageCharacterIssues(s, ctx, "secondary"),
       log,
     });
@@ -287,6 +442,8 @@ export async function genesis(db: Db, opts: GenesisOptions): Promise<World> {
       schema: genesisAtmosphericsSchema,
       label: "Genesis atmospherics",
       buildPrompt: () => atmosphericsPrompt(opts, frame, secondaries),
+      buildFragmentContext: (rawRoot) =>
+        atmosphericsFragmentContext(opts, frame, secondaries, rawRoot),
       extraIssues: (a) => stageCharacterIssues(a, ctx, "atmospheric"),
       log,
     });

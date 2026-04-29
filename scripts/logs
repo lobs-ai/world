@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Tail container logs. Pass `web` or `tick` for one service, or no arg
+# for both interleaved. Ctrl-C to stop following.
+#
+# Usage:
+#   ./scripts/logs            # both
+#   ./scripts/logs web        # just the web server
+#   ./scripts/logs tick       # just the tick loop
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+require_docker
+exec "${COMPOSE[@]}" logs -f --tail=100 "$@"

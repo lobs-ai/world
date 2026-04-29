@@ -14,7 +14,11 @@ function main(): void {
       process.exit(0);
     }
     for (const w of worlds) {
-      console.log(`${w.id}\t${w.name}\ttick=${w.tick}\t${w.premise}`);
+      // Single-line summary so callers can grep / awk -F'\t' safely.
+      // Premise is collapsed and truncated; the full premise is available
+      // when dumping a specific world.
+      const summary = w.premise.replace(/\s+/g, " ").slice(0, 120);
+      console.log(`${w.id}\t${w.name}\ttick=${w.tick}\t${summary}`);
     }
     return;
   }

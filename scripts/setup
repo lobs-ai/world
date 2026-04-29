@@ -1,46 +1,40 @@
 #!/usr/bin/env bash
-# One-time setup: install deps, build app, copy .env.example, prompt for key.
-# Idempotent — safe to re-run.
+# One-time setup: copy .env.example, prompt for MINIMAX_API_KEY, build the
+# world:latest Docker image. Idempotent — safe to re-run.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/_lib.sh"
 
-require_node
+require_docker
 
 if [[ ! -f "$ROOT/.env" ]]; then
   step "creating .env from .env.example"
   cp "$ROOT/.env.example" "$ROOT/.env"
   ok ".env created"
-  echo
-  echo "$(color_yellow "→ open .env and set MINIMAX_API_KEY=<your-key>")"
-  echo "   then re-run: ./scripts/setup"
-  exit 0
 fi
 
 # shellcheck disable=SC1091
 source "$ROOT/.env"
 if [[ -z "${MINIMAX_API_KEY:-}" ]]; then
-  err "MINIMAX_API_KEY is empty in .env. Set it and re-run."
-  exit 2
+  echo
+  echo "$(color_yellow "MINIMAX_API_KEY is not set in .env.")"
+  printf "Paste it now (or Ctrl-C to abort): "
+  read -r key
+  if [[ -z "$key" ]]; then
+    err "no key given"
+    exit 2
+  fi
+  upsert_env MINIMAX_API_KEY "$key"
+  ok "key saved to .env"
 fi
 
-step "installing workspace dependencies"
-npm install
-ok "dependencies installed"
-
-step "building app workspace"
-npm run build --workspace=app
-ok "app built"
-
-step "creating data directory"
 mkdir -p "$ROOT/data"
-ok "ready"
+rebuild_image
 
 echo
 echo "Next:"
 echo "  ./scripts/genesis \"A kingdom where the king has been dying for forty years.\""
-echo "  ./scripts/tick                  # one tick on the only/selected world"
-echo "  ./scripts/loop                  # tick forever, every 15 minutes"
+echo "  ./scripts/up                    # start web + tick loop in the background"
 echo "  ./scripts/web                   # open the chronicle in a browser"

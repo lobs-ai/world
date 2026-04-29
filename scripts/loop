@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Run the tick loop forever. Cadence comes from WORLD_TICK_INTERVAL_SECONDS
-# (default 900s = 15 min). Ctrl-C to stop.
+# Run the tick loop in the foreground. Cadence comes from
+# WORLD_TICK_INTERVAL_SECONDS (default 900s = 15 min). Ctrl-C to stop.
+#
+# For background operation, prefer ./scripts/up which starts both the tick
+# loop and the web server as long-lived containers.
 #
 # Usage:
 #   ./scripts/loop                # auto-pick or prompt
@@ -11,14 +14,13 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/_lib.sh"
 
-require_node
+require_docker
 require_minimax_key
-ensure_install
-ensure_app_built
+ensure_image_built
 
 worldId="$(resolve_world_id "${1:-}")"
 step "tick loop running for $(color_dim "$worldId")"
 echo "  cadence: ${WORLD_TICK_INTERVAL_SECONDS:-900}s   (override in .env)"
 echo "  Ctrl-C to stop"
 echo
-exec npm run --silent --workspace=app tick:loop -- "$worldId"
+run_app_oneshot npm run --silent --workspace=app tick:loop -- "$worldId"

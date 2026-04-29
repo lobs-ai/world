@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# scripts/run — one command to do it all.
+# scripts/run — one command to do it all, dockerized.
 #
 # In order, this script:
-#   1. checks Node, copies .env if missing, asks for MINIMAX_API_KEY
-#   2. installs npm deps if not present
-#   3. builds the app workspace if not built / stale
-#   4. seeds a world if there are none yet (prompts for premise)
-#   5. runs the tick loop in the background (every WORLD_TICK_INTERVAL_SECONDS)
-#   6. starts the Next.js dev server on :3000 and opens the browser
+#   1. checks Docker, copies .env if missing, asks for MINIMAX_API_KEY
+#   2. builds the world:latest image if it doesn't exist
+#   3. seeds a world if there are none yet (prompts for premise; -f <path> ok)
+#   4. starts web + tick loop in the background via docker compose
+#   5. opens the browser to the chronicle
 #
-# The chronicle may be empty for the first tick interval — that's expected;
-# the background loop will populate it.
+# Stop everything with: ./scripts/down
 #
-# Ctrl-C stops both the loop and the web server cleanly.
+# Usage:
+#   ./scripts/run                          # interactive (prompts for premise if no worlds)
+#   ./scripts/run -f path/to/premise.txt   # seed from a file (only used on first run)
+#   ./scripts/run path/to/premise.txt      # auto-detected as a file
 
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,7 +21,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_lib.sh"
 
 # ── 1. preflight ────────────────────────────────────────────────────────────
-require_node
+require_docker
 
 if [[ ! -f "$ROOT/.env" ]]; then
   step "creating .env from .env.example"
@@ -39,76 +40,61 @@ if [[ -z "${MINIMAX_API_KEY:-}" ]]; then
     err "no key given"
     exit 2
   fi
-  # Replace or append the line in .env
-  if grep -q '^MINIMAX_API_KEY=' "$ROOT/.env"; then
-    # macOS sed wants -i ''
-    sed -i '' "s|^MINIMAX_API_KEY=.*|MINIMAX_API_KEY=$key|" "$ROOT/.env"
-  else
-    printf '\nMINIMAX_API_KEY=%s\n' "$key" >> "$ROOT/.env"
-  fi
+  upsert_env MINIMAX_API_KEY "$key"
   export MINIMAX_API_KEY="$key"
   ok "key saved to .env"
 fi
 
-# ── 2. install + build ──────────────────────────────────────────────────────
-ensure_install
-ensure_app_built
+# ── 2. build image ──────────────────────────────────────────────────────────
 mkdir -p "$ROOT/data"
+ensure_image_built
 
-# ── 3. seed a world if none exists ─────────────────────────────────────────
-worlds_blob="$(npm --silent run dump --workspace=app 2>/dev/null || true)"
-if [[ -z "$worlds_blob" || "$worlds_blob" == *"no worlds"* ]]; then
+# ── 3. parse optional premise/file arg (only used if no worlds yet) ────────
+if ! parse_premise_args "$@"; then
+  err "$PREMISE_ERROR"
+  exit 2
+fi
+run_premise="$PREMISE"
+
+# ── 4. seed a world if none exist ──────────────────────────────────────────
+worlds_blob="$(list_worlds_compact 2>/dev/null || true)"
+if [[ -z "$worlds_blob" ]]; then
   echo
   step "no worlds yet — let's seed one"
   default_premise="A kingdom where the king has been dying for forty years."
-  printf "premise [%s]\n> " "$(color_dim "$default_premise")"
-  read -r premise
-  premise="${premise:-$default_premise}"
+  if [[ -z "$run_premise" ]]; then
+    printf "premise [%s] (or a path to a file)\n> " "$(color_dim "$default_premise")"
+    read -r premise
+    if [[ -n "$premise" && -f "$premise" ]]; then
+      premise="$(cat "$premise")"
+    fi
+    premise="${premise:-$default_premise}"
+  else
+    premise="$run_premise"
+  fi
   step "seeding world (one LLM call, ~20–40s)"
-  npm run --silent --workspace=app genesis -- "$premise"
+  run_app_oneshot npm run --silent --workspace=app genesis -- "$premise"
   ok "world seeded"
+elif [[ -n "$run_premise" ]]; then
+  echo
+  step "(world already exists; ignoring premise argument)"
 fi
 
 worldId="$(resolve_world_id "")"
+upsert_env WORLD_ID "$worldId"
 
-# ── 4. start tick loop in background ───────────────────────────────────────
-LOG_DIR="$ROOT/data/logs"
-mkdir -p "$LOG_DIR"
-TICK_LOG="$LOG_DIR/tick.log"
-
-step "starting tick loop (cadence ${WORLD_TICK_INTERVAL_SECONDS:-900}s) → $TICK_LOG"
-npm run --silent --workspace=app tick:loop -- "$worldId" >>"$TICK_LOG" 2>&1 &
-LOOP_PID=$!
-
-cleanup() {
-  echo
-  step "shutting down"
-  if kill -0 "$LOOP_PID" 2>/dev/null; then
-    kill "$LOOP_PID" 2>/dev/null || true
-    wait "$LOOP_PID" 2>/dev/null || true
-  fi
-  if [[ -n "${WEB_PID:-}" ]] && kill -0 "$WEB_PID" 2>/dev/null; then
-    kill "$WEB_PID" 2>/dev/null || true
-    wait "$WEB_PID" 2>/dev/null || true
-  fi
-  ok "stopped"
-}
-trap cleanup EXIT INT TERM
-
-# ── 5. start the web server ────────────────────────────────────────────────
-URL="http://localhost:3000/world/$worldId"
+# ── 5. start web + tick in the background ──────────────────────────────────
+step "starting web + tick (worldId=$(color_dim "$worldId"))"
+"${COMPOSE[@]}" up -d
+URL="http://localhost:8534/world/$worldId"
+ok "running"
 echo
 ok "world id     $(color_dim "$worldId")"
-ok "tick log     $(color_dim "tail -f $TICK_LOG")"
 ok "chronicle    $(color_blue "$URL")"
+ok "logs         $(color_dim "./scripts/logs")"
+ok "stop         $(color_dim "./scripts/down")"
 echo
 
-# Try to open the browser (macOS).
 if command -v open >/dev/null 2>&1; then
   ( sleep 2 && open "$URL" ) &
 fi
-
-# Hand foreground over to next dev so its output streams to the user.
-npm run --silent --workspace=web dev &
-WEB_PID=$!
-wait "$WEB_PID"

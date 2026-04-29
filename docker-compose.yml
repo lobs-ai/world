@@ -1,0 +1,44 @@
+# Compose file lives at world/docker-compose.yml. Build context is the
+# parent directory so we can include the sibling ../agentic/packages/llm
+# package referenced by file:.. in app/package.json.
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: world/Dockerfile
+    image: world:latest
+    container_name: world-web
+    env_file: .env
+    environment:
+      WORLD_DB: /repo/world/data/world.db
+    ports:
+      - "8534:3000"
+    volumes:
+      - ./data:/repo/world/data
+    restart: unless-stopped
+    command: ["npm", "run", "--silent", "--workspace=web", "start"]
+
+  tick:
+    image: world:latest
+    container_name: world-tick
+    depends_on:
+      web:
+        condition: service_started
+    env_file: .env
+    environment:
+      WORLD_DB: /repo/world/data/world.db
+    volumes:
+      - ./data:/repo/world/data
+    restart: unless-stopped
+    # The tick loop expects a worldId argument. Compose substitutes WORLD_ID
+    # from the environment (or .env). If unset, the container exits with a
+    # clear message.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$${WORLD_ID:-}" ]; then
+          echo "WORLD_ID not set. Run: ./scripts/up <worldId>" >&2
+          exit 2
+        fi
+        exec npm run --silent --workspace=app tick:loop -- "$${WORLD_ID}"

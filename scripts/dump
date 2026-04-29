@@ -11,12 +11,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/_lib.sh"
 
-require_node
-ensure_install
-ensure_app_built
+require_docker
+ensure_image_built
 
 if [[ $# -eq 0 ]]; then
-  npm run --silent --workspace=app dump
+  run_app_oneshot npm run --silent --workspace=app dump
 else
-  npm run --silent --workspace=app dump -- "$1"
+  run_app_oneshot npm run --silent --workspace=app dump -- "$1"
 fi

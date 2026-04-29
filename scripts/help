@@ -7,17 +7,22 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_lib.sh"
 
 cat <<EOF
-$(color_blue "world — scripts")
+$(color_blue "world — scripts")  $(color_dim "(everything runs inside Docker)")
 
-  $(color_green "./scripts/run")                do everything: setup, seed, tick loop, web ↑
-  $(color_green "./scripts/setup")              install deps, build app, prep .env (one-time)
-  $(color_green "./scripts/genesis") "<premise>"  seed a new world from a one-line premise
-  $(color_green "./scripts/tick") [worldId]     run one tick (--n 5 to run several)
-  $(color_green "./scripts/loop") [worldId]     run forever, every 15 min (Ctrl-C to stop)
-  $(color_green "./scripts/web")                 open the chronicle on http://localhost:3000
-  $(color_green "./scripts/dump") [worldId]     list worlds, or dump a chronicle as markdown
-  $(color_green "./scripts/reset")              wipe the local database (asks first)
-  $(color_green "./scripts/help")               this list
+  $(color_green "./scripts/run")      do everything: setup, seed, start web + tick loop ↑
+  $(color_green "./scripts/setup")    one-time: prompt for API key, build the image
+  $(color_green "./scripts/up")       start web + tick loop in the background
+  $(color_green "./scripts/down")     stop web + tick loop (data is preserved)
+  $(color_green "./scripts/logs")     tail container logs (web/tick/both)
+  $(color_green "./scripts/web")      ensure the web container is up; open browser
+
+  $(color_green "./scripts/genesis") "<premise>"   seed a new world (-f <path> or path also accepted)
+  $(color_green "./scripts/tick") [worldId]      run one tick (--n 5 to run several)
+  $(color_green "./scripts/loop") [worldId]      run the tick loop in foreground (Ctrl-C to stop)
+  $(color_green "./scripts/dump") [worldId]      list worlds, or dump a chronicle as markdown
+  $(color_green "./scripts/reset")               wipe the local database (asks first)
+  $(color_green "./scripts/test")  [bash|ts]     run unit tests (no Docker build needed)
+  $(color_green "./scripts/help")                this list
 
 $(color_dim "first run (zero-knowledge):")
   ./scripts/run
@@ -25,7 +30,7 @@ $(color_dim "first run (zero-knowledge):")
 $(color_dim "first run (manual):")
   ./scripts/setup
   ./scripts/genesis "A kingdom where the king has been dying for forty years."
-  ./scripts/tick
-  ./scripts/web
+  ./scripts/up
+  open http://localhost:8534
 
 EOF
