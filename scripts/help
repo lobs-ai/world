@@ -13,6 +13,7 @@ $(color_blue "world — scripts")  $(color_dim "(everything runs inside Docker)"
   $(color_green "./scripts/setup")    one-time: prompt for API key, build the image
   $(color_green "./scripts/up")       start web + tick loop in the background
   $(color_green "./scripts/down")     stop web + tick loop (data is preserved)
+  $(color_green "./scripts/restart")  rebuild image, then stop + start (--no-build to skip rebuild)
   $(color_green "./scripts/logs")     tail container logs (web/tick/both)
   $(color_green "./scripts/web")      ensure the web container is up; open browser
 

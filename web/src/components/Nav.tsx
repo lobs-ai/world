@@ -5,6 +5,7 @@ interface NavProps {
   worldName: string;
   active?:
     | "chronicle"
+    | "read"
     | "story"
     | "cast"
     | "world"
@@ -20,6 +21,7 @@ interface NavProps {
 // and places → the long view."
 const LINKS: { key: NonNullable<NavProps["active"]>; label: string; path: string }[] = [
   { key: "chronicle", label: "Chronicle", path: "" },
+  { key: "read", label: "Read", path: "/read" },
   { key: "story", label: "Story", path: "/story" },
   { key: "cast", label: "Cast", path: "/cast" },
   { key: "atlas", label: "Atlas", path: "/map" },

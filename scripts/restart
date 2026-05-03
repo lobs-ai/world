@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Restart the web + tick containers. Equivalent to `./scripts/down` followed
+# by `./scripts/up`, but in one command and without re-running the genesis /
+# setup checks twice. Data on disk (./data/world.db) is preserved.
+#
+# Rebuilds the image by default — most restarts come right after a code
+# change, and a stale image is the most common reason a "restart" looks
+# like it didn't take. Pass --no-build to skip the rebuild when you only
+# need to bounce the containers.
+#
+# Usage:
+#   ./scripts/restart                # auto-pick or prompt for worldId, rebuild image
+#   ./scripts/restart <worldId>
+#   ./scripts/restart --no-build     # skip the rebuild (just bounce containers)
+#   ./scripts/restart <worldId> --no-build
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+require_docker
+require_minimax_key
+
+# Default to rebuilding; allow opt-out via --no-build / -n. We still accept
+# --build / -b as a no-op so older muscle memory keeps working.
+do_rebuild=1
+worldArg=""
+for arg in "$@"; do
+  case "$arg" in
+    --no-build|-n) do_rebuild=0 ;;
+    --build|-b)    do_rebuild=1 ;;
+    *)             worldArg="$arg" ;;
+  esac
+done
+
+if (( do_rebuild )); then
+  rebuild_image
+else
+  ensure_image_built
+fi
+
+worldId="$(resolve_world_id "$worldArg")"
+upsert_env WORLD_ID "$worldId"
+
+step "stopping web + tick"
+"${COMPOSE[@]}" down
+ok "stopped"
+
+step "starting web + tick (worldId=$(color_dim "$worldId"))"
+"${COMPOSE[@]}" up -d
+ok "running"
+echo
+echo "  chronicle  $(color_blue "http://localhost:8534/world/$worldId")"
+echo "  logs       ./scripts/logs"
+echo "  stop       ./scripts/down"
