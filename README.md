@@ -67,3 +67,7 @@ treatment from the prototype handoff is not yet ported).
 - [`DESIGN.md`](./DESIGN.md) — architecture, state model, tick loop, evals.
 - [`AGENTS.md`](./AGENTS.md) — operational contract for anyone (human or agent) writing code here. Read before opening a PR.
 - [`design/`](./design/) — the original prototype handoff (HTML/JSX). Reference for the visual system.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
