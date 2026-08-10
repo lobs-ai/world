@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json && mkdir -p dist/db && cp src/db/schema.sql dist/db/schema.sql",
     "typecheck": "tsc --noEmit",
     "genesis": "tsx src/cli/genesis.ts",
+    "seed:demo": "tsx src/cli/seed-demo.ts",
     "tick": "tsx src/cli/tick.ts",
     "tick:loop": "tsx src/cli/loop.ts",
     "dump": "tsx src/cli/dump.ts",
