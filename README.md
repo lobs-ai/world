@@ -26,6 +26,17 @@ Every tick produces one chronicle entry. The chronicle is the product.
 
 ## Quickstart
 
+`app` depends on `@agentic/llm` by relative path, so
+[`agentic`](https://github.com/lobs-ai/agentic) must be checked out **beside**
+this repo and its `llm` package built once:
+
+```bash
+git clone https://github.com/lobs-ai/agentic.git   # sibling of world/
+(cd agentic/packages/llm && npm install && npx tsc)
+```
+
+Then:
+
 ```bash
 # 1. install — workspaces hoist to repo root
 npm install
@@ -54,6 +65,21 @@ A few helpful side commands:
 npm run dump                    # list all worlds
 npm run dump <worldId>          # dump the chronicle as markdown to stdout
 ```
+
+### Running without an API key
+
+`seed:demo` writes a complete hand-authored world (Vespera — the premise in
+[`examples/`](./examples/vespera.txt)) straight into the database: locations,
+factions, cast, plots, prophecies and four chronicle entries. Nothing is
+generated and no model is called, so the whole web surface can be run, reviewed
+and screenshotted for free.
+
+```bash
+npm run seed:demo               # --force to replace an existing demo world
+npm run dev:web                 # http://localhost:3000/world/vespera-demo
+```
+
+It is a fixture, not a substitute for `genesis` + `tick`.
 
 ## Status
 
