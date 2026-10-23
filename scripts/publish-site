@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Snapshot the chronicle as a static site and force-push it to the gh-pages
+# branch on origin, which GitHub Pages serves at https://lobslab.com/world/.
+# Each publish replaces the branch with a single commit, so old snapshots
+# (and their images) don't pile up in history.
+#
+# Runs on the host, not in Docker: needs a local `npm install` whose
+# better-sqlite3 binding matches the active node.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_lib.sh"
+
+OUT="$ROOT/web/out"
+
+step "exporting static site"
+node "$SCRIPT_DIR/export-site.mjs"
+
+step "pushing $OUT to gh-pages"
+REMOTE="$(git -C "$ROOT" remote get-url origin)"
+rm -rf "$OUT/.git"
+git -C "$OUT" init -q -b gh-pages
+git -C "$OUT" add -A
+git -C "$OUT" commit -q -m "Publish chronicle snapshot"
+git -C "$OUT" push -q --force "$REMOTE" gh-pages
+rm -rf "$OUT/.git"
+ok "published to gh-pages"

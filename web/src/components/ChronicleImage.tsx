@@ -7,7 +7,8 @@ export function imageUrlFromPath(path: string | undefined): string | null {
   // Stored as "data/images/<hash>.png" — pull out the hash.
   const m = /\/?images\/([a-f0-9]+)\.png$/i.exec(path);
   if (!m || !m[1]) return null;
-  return `/api/img/${m[1]}`;
+  // Plain <img> tags don't get Next's basePath, so prefix it by hand.
+  return `${process.env.WORLD_BASE_PATH}/api/img/${m[1]}`;
 }
 
 export function ChronicleImage({

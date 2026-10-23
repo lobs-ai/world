@@ -13,3 +13,4 @@ data/logs/
 data/images/
 data/image-budget.json
 .DS_Store
+out/
